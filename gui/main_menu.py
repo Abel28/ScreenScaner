@@ -9,14 +9,16 @@ from screenshot.selector import RegionSelector
 from utils.image_matcher import ImageMatcher
 from utils.click_handler import ClickHandler
 import os
+import io
 import time
 from .styles import Styles
+import numpy as np
 
 class MainMenu:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Image Detector Test tool")
-        self.root.geometry("1000x600")
+        self.root.geometry("1000x1000")
         self.db = DBHandler()
         self.actions_queue = []
         self.styles = Styles()
@@ -108,7 +110,7 @@ class MainMenu:
             click_button = ttk.Button(region_frame, text="Click", command=lambda fn=region[1]: self.add_action("Click", fn))
             click_button.pack(side="left", padx=5)
 
-            click_and_fill_button = ttk.Button(region_frame, text="Click y Llenar", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
+            click_and_fill_button = ttk.Button(region_frame, text="Click y Escribir", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
             click_and_fill_button.pack(side="left", padx=5)
 
     def add_action(self, action_type, filename):
@@ -118,8 +120,8 @@ class MainMenu:
     def add_click_and_fill_action(self, filename):
         text = simpledialog.askstring("Texto a Escribir", f"Ingrese el texto para {filename}:")
         if text:
-            self.actions_queue.append(("Click y Llenar", filename, text))
-            self.actions_listbox.insert(tk.END, f"Click y Llenar - {filename}: '{text}'")
+            self.actions_queue.append(("Click y Escribir", filename, text))
+            self.actions_listbox.insert(tk.END, f"Click y Escribir - {filename}: '{text}'")
 
     def delete_action(self):
         selected_index = self.actions_listbox.curselection()
@@ -129,7 +131,10 @@ class MainMenu:
 
     def execute_actions(self):
         for action_type, filename, text in self.actions_queue:
-            region_image = cv2.imread(filename)
+            image_data = self.db.get_image_data(filename)
+            if image_data:
+                image_array = np.frombuffer(image_data, np.uint8)
+                region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
             if region_image is not None:
                 clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
@@ -139,7 +144,7 @@ class MainMenu:
                     if not found:
                         messagebox.showinfo("Resultado", f"No se encontraron coincidencias para {filename}.")
 
-                elif action_type == "Click y Llenar":
+                elif action_type == "Click y Escribir":
                     success = clicker.click_and_type(region_image, text)
                     if not success:
                         messagebox.showinfo("Resultado", f"No se encontraron coincidencias para {filename}.")
@@ -151,7 +156,6 @@ class MainMenu:
 
             else:
                 messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
-
 
 
     def show_saved_regions(self):
@@ -182,12 +186,15 @@ class MainMenu:
             label = tk.Label(region_frame, text=region[1])
             label.pack()
 
-            pil_img = Image.open(region[1])
-            img = ImageTk.PhotoImage(pil_img)
-            image_label = tk.Label(region_frame, image=img)
-            image_label.pack()
+            image_data = region[7]
 
-            self.image_references.append(img)
+            if image_data:
+                pil_img = Image.open(io.BytesIO(image_data))
+                img = ImageTk.PhotoImage(pil_img)
+                image_label = tk.Label(region_frame, image=img)
+                image_label.pack()
+
+                self.image_references.append(img)
 
             options_frame = tk.Frame(region_frame)
             options_frame.pack()
@@ -201,13 +208,10 @@ class MainMenu:
             click_download = ttk.Button(options_frame, text="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
             click_download.pack(side="left", padx=5)
 
-            click_delete = ttk.Button(options_frame, text="Click y Llenar", command=lambda fn=region[1]: self.delete_region(fn))
+            click_delete = ttk.Button(options_frame, text="Eliminar", command=lambda fn=region[1]: self.delete_region(fn))
             click_delete.pack(side="left", padx=5)
 
             detect_button = ttk.Button(options_frame, text="Detectar", command=lambda fn=region[1]: self.detect_all_matches_with_threshold(fn))
-            detect_button.pack(side="left", padx=5)
-
-            detect_button = ttk.Button(options_frame, text="Eliminar", command=lambda fn=region[1]: self.delete_region(fn))
             detect_button.pack(side="left", padx=5)
 
 
@@ -249,34 +253,54 @@ class MainMenu:
         save_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
         if save_path:
             try:
-                img = cv2.imread(filename)
-                cv2.imwrite(save_path, img)
-                messagebox.showinfo("Guardado", f"Imagen guardada exitosamente en {save_path}")
+                image_data = self.db.get_image_data(filename)
+
+                if image_data:
+                    image_array = np.frombuffer(image_data, np.uint8)
+                    img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                    if img is not None:
+                        cv2.imwrite(save_path, img)
+                        messagebox.showinfo("Guardado", f"Imagen guardada exitosamente en {save_path}")
+                    else:
+                        messagebox.showerror("Error", "No se pudo decodificar la imagen desde los datos binarios.")
+                else:
+                    messagebox.showerror("Error", f"No se encontró la imagen en la base de datos para el archivo: {filename}")
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo guardar la imagen: {e}")
 
 
 
     def handle_click(self, filename):
-        # Leer la imagen de la región
-        region_image = cv2.imread(filename)
+        image_data = self.db.get_image_data(filename)
         
-        if region_image is not None:
-            # Crear una instancia de ClickHandler y buscar coincidencias
-            clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
-            found = clicker.click_on_match(region_image)
+        if image_data:
+            image_array = np.frombuffer(image_data, np.uint8)
+            region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-            if found:
-                messagebox.showinfo("Resultado", "Coincidencia encontrada y clic realizado.")
+            if region_image is not None:
+                clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
+                found = clicker.click_on_match(region_image)
+
+                if found:
+                    messagebox.showinfo("Resultado", "Coincidencia encontrada y clic realizado.")
+                else:
+                    messagebox.showwarning("Resultado", "No se encontraron coincidencias en pantalla para realizar el clic.")
             else:
-                messagebox.showwarning("Resultado", "No se encontraron coincidencias en pantalla para realizar el clic.")
+                messagebox.showerror("Error", "No se pudo decodificar la imagen de la región.")
         else:
-            messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+            messagebox.showerror("Error", f"No se encontró la imagen en la base de datos para el archivo: {filename}")
 
 
     def handle_click_and_type(self, filename):
-        region_image = cv2.imread(filename)
-        
+        image_data = self.db.get_image_data(filename)
+        if image_data:
+            image_array = np.frombuffer(image_data, np.uint8)
+            region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+            if region_image is not None:
+                clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
+                
         if region_image is not None:
             text = simpledialog.askstring("Texto a Escribir", "Ingrese el texto que desea escribir:")
             if text:
@@ -339,14 +363,15 @@ class MainMenu:
             filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
 
             if filename:
-                filename = f"img/{filename}.png" if not filename.endswith(".png") else filename
+                filename = f"{filename}.png" if not filename.endswith(".png") else filename
 
                 region = self.image[y1:y2, x1:x2]
 
-                cv2.imwrite(filename, region)
-                messagebox.showinfo("Guardado", f"Región guardada exitosamente como {filename}")
+                _, buffer = cv2.imencode('.png', region)
+                image_data = buffer.tobytes()
 
-                self.db.insert_region(filename, x1, y1, x2, y2)
+                self.db.insert_region(filename, x1, y1, x2, y2, image_data=image_data)
+                messagebox.showinfo("Guardado", f"Región guardada exitosamente en la base de datos como {filename}")
             else:
                 messagebox.showwarning("Advertencia", "No se ingresó un nombre de archivo. Operación de guardado cancelada.")
         else:
@@ -354,7 +379,6 @@ class MainMenu:
 
 
     def update_execution_tab(self, event=None):
-
         for widget in self.actions_frame.winfo_children():
             widget.destroy()
 
@@ -383,12 +407,14 @@ class MainMenu:
                 region_frame = tk.Frame(scrollable_frame)
                 region_frame.pack(pady=5, fill="x")
 
-                pil_img = Image.open(region[1])
-                img = ImageTk.PhotoImage(pil_img)
-                image_label = tk.Label(region_frame, image=img)
-                image_label.pack(side="left", padx=5)
+                image_data = region[7]
+                if image_data:
+                    pil_img = Image.open(io.BytesIO(image_data))
+                    img = ImageTk.PhotoImage(pil_img)
+                    image_label = tk.Label(region_frame, image=img)
+                    image_label.pack(side="left", padx=5)
 
-                self.execution_image_references.append(img)
+                    self.execution_image_references.append(img)
 
                 options_frame = tk.Frame(region_frame)
                 options_frame.pack(side="left")
@@ -399,7 +425,7 @@ class MainMenu:
                 click_button = ttk.Button(options_frame, text="Click", command=lambda fn=region[1]: self.add_action("Click", fn))
                 click_button.pack(side="left", padx=5)
 
-                click_and_fill_button = ttk.Button(options_frame, text="Click y Llenar", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
+                click_and_fill_button = ttk.Button(options_frame, text="Click y Escribir", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
                 click_and_fill_button.pack(side="left", padx=5)
 
                 wait_image_button = ttk.Button(options_frame, text="Wait Image", command=lambda fn=region[1]: self.add_action("Wait Image", fn))
@@ -426,7 +452,11 @@ class MainMenu:
     def wait_for_image(self, filename, timeout=30, interval=1.0):
         start_time = time.time()
 
-        region_image = cv2.imread(filename)
+        image_data = self.db.get_image_data(filename)
+        if image_data:
+            image_array = np.frombuffer(image_data, np.uint8)
+            region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
         if region_image is None:
             messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
             return False
@@ -442,11 +472,9 @@ class MainMenu:
         return False
     
     def detect_match_in_screenshot(self, filename):
-        # Leer la imagen de la región seleccionada
         region_image = cv2.imread(filename)
         
         if region_image is not None:
-            # Capturar la pantalla del monitor seleccionado
             monitor_index = int(self.selected_monitor.get()) - 1
             try:
                 screenshot, monitor_info = self.screen_capture.capture_monitor(monitor_index)
@@ -454,40 +482,33 @@ class MainMenu:
                 messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
                 return
 
-            # Crear una instancia de ImageMatcher para buscar la coincidencia
             matcher = ImageMatcher(monitor_index)
             matched_image, found, top_left = matcher.match_image(region_image)
 
             if found:
-                # Dibujar un rectángulo alrededor de la coincidencia
                 bottom_right = (top_left[0] + region_image.shape[1], top_left[1] + region_image.shape[0])
                 cv2.rectangle(matched_image, top_left, bottom_right, (0, 255, 0), 3)
 
-                # Convertir la imagen de OpenCV a un formato compatible con tkinter (PIL)
                 matched_image_rgb = cv2.cvtColor(matched_image, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(matched_image_rgb)
                 tk_image = ImageTk.PhotoImage(pil_image)
 
-                # Crear una ventana de tkinter para mostrar la coincidencia
                 match_window = tk.Toplevel(self.root)
                 match_window.title("Coincidencia Detectada")
-                match_window.geometry("600x400")  # Tamaño fijo de la ventana
+                match_window.geometry("600x400")
 
-                # Crear un canvas con barras de desplazamiento para mostrar la coincidencia
                 canvas = tk.Canvas(match_window, width=600, height=400)
                 scroll_x = tk.Scrollbar(match_window, orient="horizontal", command=canvas.xview)
                 scroll_y = tk.Scrollbar(match_window, orient="vertical", command=canvas.yview)
 
                 canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
 
-                # Posicionar canvas y barras de desplazamiento en la ventana
                 canvas.pack(side="left", fill="both", expand=True)
                 scroll_x.pack(side="bottom", fill="x")
                 scroll_y.pack(side="right", fill="y")
 
-                # Agregar la imagen al canvas y configurar el área desplazable
                 canvas.create_image(0, 0, anchor="nw", image=tk_image)
-                canvas.image = tk_image  # Mantener una referencia a la imagen
+                canvas.image = tk_image
                 canvas.config(scrollregion=canvas.bbox("all"))
             else:
                 messagebox.showwarning("Detectar", "No se encontró ninguna coincidencia en la captura actual.")
@@ -495,7 +516,10 @@ class MainMenu:
             messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
 
     def detect_all_matches_with_threshold(self, filename):
-        region_image = cv2.imread(filename)
+        image_data = self.db.get_image_data(filename)
+        if image_data:
+            image_array = np.frombuffer(image_data, np.uint8)
+            region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
         
         if region_image is None:
             messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
@@ -508,7 +532,6 @@ class MainMenu:
             messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
             return
 
-        # Crear una ventana de tkinter para mostrar las coincidencias y el slider de umbral
         detect_window = tk.Toplevel(self.root)
         detect_window.title("Detectar Coincidencias")
         detect_window.geometry("800x600")

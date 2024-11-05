@@ -15,16 +15,17 @@ class DBHandler:
                     y1 INTEGER NOT NULL,
                     x2 INTEGER NOT NULL,
                     y2 INTEGER NOT NULL,
-                    action TEXT DEFAULT 'none'
+                    action TEXT DEFAULT 'none',
+                    image BLOB
                 )
             """)
 
-    def insert_region(self, filename, x1, y1, x2, y2, action='none'):
+    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, action='none'):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO regions (filename, x1, y1, x2, y2, action)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (filename, x1, y1, x2, y2, action))
+                INSERT INTO regions (filename, x1, y1, x2, y2, action, image)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (filename, x1, y1, x2, y2, action, image_data))
 
     def get_all_regions(self):
         with self.conn:
@@ -46,6 +47,23 @@ class DBHandler:
                 print(f"Error al eliminar la región de la base de datos: {e}")
             finally:
                 cursor.close()
+
+    def delete_region(self, filename):
+        with self.conn:
+            cursor = self.conn.cursor()
+            try:
+                cursor.execute("DELETE FROM regions WHERE filename = ?", (filename,))
+                self.conn.commit()
+            except Exception as e:
+                print(f"Error al eliminar la región de la base de datos: {e}")
+            finally:
+                cursor.close()
+
+    def get_image_data(self, filename):
+        with self.conn:
+            cursor = self.conn.execute("SELECT image FROM regions WHERE filename = ?", (filename,))
+            result = cursor.fetchone()
+            return result[0] if result else None
 
 
     def close(self):

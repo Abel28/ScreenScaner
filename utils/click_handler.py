@@ -18,8 +18,9 @@ class ClickHandler:
             click_y = monitor_info["top"] + top_left[1] + region_image.shape[0] // 2
 
             pyautogui.click(click_x, click_y)
-            return True
-        return False
+            return True, (click_x, click_y)
+
+        return False, None
 
 
     def click_and_type(self, region_image, text):
