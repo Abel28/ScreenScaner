@@ -17,7 +17,6 @@ class ClickHandler:
             click_x = monitor_info["left"] + top_left[0] + region_image.shape[1] // 2
             click_y = monitor_info["top"] + top_left[1] + region_image.shape[0] // 2
 
-            # Realizar el clic en la posición calculada
             pyautogui.click(click_x, click_y)
             return True
         return False

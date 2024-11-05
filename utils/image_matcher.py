@@ -26,3 +26,15 @@ class ImageMatcher:
             return screenshot, True, top_left
         else:
             return screenshot, False, None
+        
+    def find_all_matches(self, template, image, threshold=0.8):
+        result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+        match_locations = np.where(result >= threshold)
+
+        matches = []
+        for pt in zip(*match_locations[::-1]):
+            top_left = pt
+            bottom_right = (pt[0] + template.shape[1], pt[1] + template.shape[0])
+            matches.append((top_left, bottom_right))
+        
+        return matches

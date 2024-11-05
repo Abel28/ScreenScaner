@@ -37,17 +37,15 @@ class DBHandler:
             """, (action, region_id))
 
     def delete_region(self, filename):
-        conn = self.connect()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("DELETE FROM regions WHERE filename = ?", (filename,))
-            conn.commit()
-        except Exception as e:
-            print(f"Error al eliminar la región de la base de datos: {e}")
-        finally:
-            cursor.close()
-            conn.close()
+        with self.conn:
+            cursor = self.conn.cursor()
+            try:
+                cursor.execute("DELETE FROM regions WHERE filename = ?", (filename,))
+                self.conn.commit()
+            except Exception as e:
+                print(f"Error al eliminar la región de la base de datos: {e}")
+            finally:
+                cursor.close()
 
 
     def close(self):
