@@ -1,8 +1,9 @@
 import cv2
 from PIL import Image, ImageTk
+from tkinter import Canvas
 
 class RegionSelector:
-    def __init__(self, canvas):
+    def __init__(self, canvas: Canvas):
         self.canvas = canvas
         self.start_x = self.start_y = self.rect = None
         self.selected_regions = []
@@ -26,21 +27,3 @@ class RegionSelector:
         end_x, end_y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
         self.selected_regions.append((int(self.start_x), int(self.start_y), int(end_x), int(end_y)))
         print(f"Región guardada: ({self.start_x}, {self.start_y}, {end_x}, {end_y})")
-
-    def save_selected_regions(self, image):
-        saved_images = []
-        height, width = image.shape[:2]
-
-        for idx, (x1, y1, x2, y2) in enumerate(self.selected_regions):
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(width, x2), min(height, y2)
-
-            if x2 > x1 and y2 > y1:
-                region = image[y1:y2, x1:x2]
-                filename = f"region_{idx + 1}.png"
-                cv2.imwrite(filename, region)
-                saved_images.append((filename, ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(region, cv2.COLOR_BGR2RGB)))))
-            else:
-                print(f"Región inválida o vacía: ({x1}, {y1}, {x2}, {y2}) - No se guarda.")
-
-        return saved_images

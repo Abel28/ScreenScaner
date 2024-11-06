@@ -16,16 +16,19 @@ class DBHandler:
                     x2 INTEGER NOT NULL,
                     y2 INTEGER NOT NULL,
                     action TEXT DEFAULT 'none',
-                    image BLOB
+                    image BLOB,
+                    threshold REAL DEFAULT 0.8,
+                    click_x INTEGER DEFAULT 0,
+                    click_y INTEGER DEFAULT 0
                 )
             """)
 
-    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, action='none'):
+    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.8, click_offset=(0, 0)):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO regions (filename, x1, y1, x2, y2, action, image)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (filename, x1, y1, x2, y2, action, image_data))
+                INSERT INTO regions (filename, x1, y1, x2, y2, image, threshold, click_x, click_y)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (filename, x1, y1, x2, y2, image_data, threshold, click_offset[0], click_offset[1]))
 
     def get_all_regions(self):
         with self.conn:
@@ -60,11 +63,53 @@ class DBHandler:
                 cursor.close()
 
     def get_image_data(self, filename):
-        with self.conn:
-            cursor = self.conn.execute("SELECT image FROM regions WHERE filename = ?", (filename,))
-            result = cursor.fetchone()
-            return result[0] if result else None
+        """
+        Recupera los datos de la imagen y el offset guardado en la base de datos.
 
+        Args:
+            filename (str): El nombre del archivo de la región en la base de datos.
+
+        Returns:
+            tuple: (image_data, click_x, click_y) o (None, None, None) si no se encuentra.
+        """
+        with self.conn:
+            cursor = self.conn.execute("""
+                SELECT image, click_x, click_y FROM regions WHERE filename = ?
+            """, (filename,))
+            result = cursor.fetchone()
+            
+            if result:
+                image_data, click_x, click_y = result
+                return image_data, click_x, click_y
+            else:
+                return None, None, None
+        
+    def get_image_data_and_threshold(self, filename):
+        with self.conn:
+            cursor = self.conn.execute("""
+                SELECT image, threshold FROM regions WHERE filename = ?
+            """, (filename,))
+            result = cursor.fetchone()
+            
+            if result:
+                image_data, threshold = result
+                return image_data, threshold
+            else:
+                return None, None
+
+    def update_threshold(self, filename, new_threshold):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE regions
+                SET threshold = ?
+                WHERE filename = ?
+            """, (new_threshold, filename))
+
+    def update_offset(self, filename, click_x, click_y):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE regions SET click_x = ?, click_y = ? WHERE filename = ?
+            """, (click_x, click_y, filename))
 
     def close(self):
         self.conn.close()

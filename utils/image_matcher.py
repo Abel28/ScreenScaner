@@ -27,6 +27,25 @@ class ImageMatcher:
         else:
             return screenshot, False, None
         
+    def match_image_with_threshold(self, screen_image, region_image, threshold):
+        if region_image is None:
+            raise ValueError("La imagen de la región es None. Asegúrate de que region_image esté correctamente cargada.")
+        
+        result = cv2.matchTemplate(screen_image, region_image, cv2.TM_CCOEFF_NORMED)
+        
+        locations = np.where(result >= threshold)
+        found_points = list(zip(*locations[::-1]))
+
+        matched_image = screen_image.copy()
+        w, h = region_image.shape[1], region_image.shape[0]
+        for pt in found_points:
+            cv2.rectangle(matched_image, pt, (pt[0] + w, pt[1] + h), (0, 255, 0), 2)
+
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        top_left = max_loc if max_val >= threshold else None
+
+        return matched_image, found_points, top_left
+        
     def find_all_matches(self, template, image, threshold=0.8):
         result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
         match_locations = np.where(result >= threshold)

@@ -40,6 +40,9 @@ class MainMenu:
         self.tab2 = tk.Frame(notebook)
         notebook.add(self.tab2, text="Ejecución en Cadena")
 
+        self.tab3 = tk.Frame(notebook)
+        notebook.add(self.tab3, text="Pasos")
+
         notebook.bind("<<NotebookTabChanged>>", lambda event: self.on_tab_selected(event, notebook))
 
         self.search_var = tk.StringVar()
@@ -77,11 +80,22 @@ class MainMenu:
         view_button.pack(pady=5)
 
         self.setup_execution_tab()
+        self.setup_steps_tab()
 
     def on_tab_selected(self, event, notebook):
         selected_tab = notebook.index(notebook.select())
         if selected_tab == 1:
             self.update_execution_tab()
+
+    
+    def setup_steps_tab(self):
+        self.steps_frame = tk.Frame(self.tab3)
+        self.steps_frame.pack(fill="both", expand=True)
+
+        tk.Label(self.steps_frame, text="Pasos").pack()
+        ttk.OptionMenu(self.steps_frame, variable=tk.StringVar()).pack()
+
+        ttk.Button(self.steps_frame, text="Crear").pack()
 
 
     def setup_execution_tab(self):
@@ -131,7 +145,7 @@ class MainMenu:
 
     def execute_actions(self):
         for action_type, filename, text in self.actions_queue:
-            image_data = self.db.get_image_data(filename)
+            image_data, offset_x, offset_y = self.db.get_image_data(filename)
             if image_data:
                 image_array = np.frombuffer(image_data, np.uint8)
                 region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
@@ -140,12 +154,12 @@ class MainMenu:
                 clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
 
                 if action_type == "Click":
-                    found = clicker.click_on_match(region_image)
+                    found = clicker.click_on_match(region_image, offset_x=offset_x, offset_y=offset_y)
                     if not found:
                         messagebox.showinfo("Resultado", f"No se encontraron coincidencias para {filename}.")
 
                 elif action_type == "Click y Escribir":
-                    success = clicker.click_and_type(region_image, text)
+                    success = clicker.click_and_type(region_image, text, offset_x=offset_x, offset_y=offset_y)
                     if not success:
                         messagebox.showinfo("Resultado", f"No se encontraron coincidencias para {filename}.")
                 
@@ -156,6 +170,8 @@ class MainMenu:
 
             else:
                 messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+
+        messagebox.showinfo("Resultado", "La ejecución finalizó sin ninguna excepción.")
 
 
     def show_saved_regions(self):
@@ -270,9 +286,8 @@ class MainMenu:
                 messagebox.showerror("Error", f"No se pudo guardar la imagen: {e}")
 
 
-
     def handle_click(self, filename):
-        image_data = self.db.get_image_data(filename)
+        image_data, offset_x, offset_y = self.db.get_image_data(filename)
         
         if image_data:
             image_array = np.frombuffer(image_data, np.uint8)
@@ -280,7 +295,7 @@ class MainMenu:
 
             if region_image is not None:
                 clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
-                found = clicker.click_on_match(region_image)
+                found = clicker.click_on_match(region_image, offset_x=offset_x, offset_y=offset_y)
 
                 if found:
                     messagebox.showinfo("Resultado", "Coincidencia encontrada y clic realizado.")
@@ -293,28 +308,25 @@ class MainMenu:
 
 
     def handle_click_and_type(self, filename):
-        image_data = self.db.get_image_data(filename)
+        image_data, offset_x, offset_y = self.db.get_image_data(filename)
         if image_data:
             image_array = np.frombuffer(image_data, np.uint8)
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
             if region_image is not None:
-                clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
-                
-        if region_image is not None:
-            text = simpledialog.askstring("Texto a Escribir", "Ingrese el texto que desea escribir:")
-            if text:
-                clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
-                success = clicker.click_and_type(region_image, text)
+                text = simpledialog.askstring("Texto a Escribir", "Ingrese el texto que desea escribir:")
+                if text:
+                    clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
+                    success = clicker.click_and_type(region_image, text, offset_x=offset_x, offset_y=offset_y)
 
-                if success:
-                    messagebox.showinfo("Resultado", "Coincidencia encontrada, clic realizado y texto escrito.")
+                    if success:
+                        messagebox.showinfo("Resultado", "Coincidencia encontrada, clic realizado y texto escrito.")
+                    else:
+                        messagebox.showinfo("Resultado", "No se encontraron coincidencias.")
                 else:
-                    messagebox.showinfo("Resultado", "No se encontraron coincidencias.")
+                    messagebox.showwarning("Advertencia", "No se ingresó texto para escribir.")
             else:
-                messagebox.showwarning("Advertencia", "No se ingresó texto para escribir.")
-        else:
-            messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+                messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
 
     def show_screenshot(self):
         monitor_index = int(self.selected_monitor.get()) - 1
@@ -363,20 +375,61 @@ class MainMenu:
             filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
 
             if filename:
+                threshold, region_image = self.get_threshold_and_matches()
+                if threshold is None or region_image is None:
+                    return
+
                 filename = f"{filename}.png" if not filename.endswith(".png") else filename
 
-                region = self.image[y1:y2, x1:x2]
-
-                _, buffer = cv2.imencode('.png', region)
-                image_data = buffer.tobytes()
-
-                self.db.insert_region(filename, x1, y1, x2, y2, image_data=image_data)
-                messagebox.showinfo("Guardado", f"Región guardada exitosamente en la base de datos como {filename}")
+                self.select_click_offset(filename, x1, y1, x2, y2, region_image, threshold)
             else:
                 messagebox.showwarning("Advertencia", "No se ingresó un nombre de archivo. Operación de guardado cancelada.")
         else:
             messagebox.showerror("Error", "No hay una región seleccionada para guardar.")
 
+    def select_click_offset(self, filename, x1, y1, x2, y2, region_image, threshold):
+        """
+        Muestra la región seleccionada y permite al usuario seleccionar el punto de clic.
+        """
+        offset_window = tk.Toplevel(self.root)
+        offset_window.title("Seleccionar Punto de Clic")
+        offset_window.geometry("400x400")
+
+        region_rgb = cv2.cvtColor(region_image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(region_rgb)
+        tk_image = ImageTk.PhotoImage(pil_image)
+
+        canvas = tk.Canvas(offset_window, width=pil_image.width, height=pil_image.height)
+        canvas.create_image(0, 0, anchor="nw", image=tk_image)
+        canvas.image = tk_image
+
+        canvas.pack()
+
+        click_offset = {"x": None, "y": None}
+
+        def on_click(event):
+            click_offset["x"] = event.x
+            click_offset["y"] = event.y
+
+            canvas.delete("click_marker")
+            canvas.create_oval(event.x - 3, event.y - 3, event.x + 3, event.y + 3, fill="red", tags="click_marker")
+
+        canvas.bind("<Button-1>", on_click)
+
+        def confirm_click_offset():
+            if click_offset["x"] is not None and click_offset["y"] is not None:
+                _, buffer = cv2.imencode('.png', region_image)
+                image_data = buffer.tobytes()
+
+                self.db.insert_region(filename, x1, y1, x2, y2, image_data=image_data, threshold=threshold,
+                                    click_offset=(click_offset["x"], click_offset["y"]))
+                messagebox.showinfo("Guardado", f"Región y punto de clic guardados exitosamente en la base de datos como {filename}")
+                offset_window.destroy()
+            else:
+                messagebox.showwarning("Advertencia", "Por favor, seleccione un punto de clic antes de confirmar.")
+
+        confirm_button = tk.Button(offset_window, text="Confirmar Punto de Clic", command=confirm_click_offset)
+        confirm_button.pack(pady=10)
 
     def update_execution_tab(self, event=None):
         for widget in self.actions_frame.winfo_children():
@@ -384,52 +437,123 @@ class MainMenu:
 
         search_text = self.search_var.get().lower()
 
-        canvas = tk.Canvas(self.actions_frame)
-        scroll_y = tk.Scrollbar(self.actions_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas)
+        table_frame = tk.Frame(self.actions_frame)
+        table_frame.pack(fill="both", expand=True)
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scroll_y.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scroll_y.pack(side="right", fill="y")
+        tk.Label(table_frame, text="Imagen", width=20, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=0, padx=5, pady=5)
+        tk.Label(table_frame, text="Nombre", width=10, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=1, padx=5, pady=5)
+        tk.Label(table_frame, text="Threshold", width=10, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=2, padx=5, pady=5)
+        tk.Label(table_frame, text="Offset (X, Y)", width=15, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=3, padx=5, pady=5)
+        tk.Label(table_frame, text="Opciones", width=30, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=4, padx=5, pady=5)
 
         self.execution_image_references = []
 
+        row_index = 1
         for region in self.db.get_all_regions():
             region_name = region[1].lower()
             if search_text in region_name:
-                region_frame = tk.Frame(scrollable_frame)
-                region_frame.pack(pady=5, fill="x")
-
                 image_data = region[7]
+                offset_x, offset_y = region[9], region[10]
                 if image_data:
-                    pil_img = Image.open(io.BytesIO(image_data))
+                    image_array = np.frombuffer(image_data, np.uint8)
+                    region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                    
+                    if offset_x is not None and offset_y is not None:
+                        cv2.circle(region_image, (offset_x, offset_y), radius=5, color=(0, 0, 255), thickness=-1)
+                    
+                    region_image_rgb = cv2.cvtColor(region_image, cv2.COLOR_BGR2RGB)
+                    pil_img = Image.fromarray(region_image_rgb)
                     img = ImageTk.PhotoImage(pil_img)
-                    image_label = tk.Label(region_frame, image=img)
-                    image_label.pack(side="left", padx=5)
 
+                    image_frame = tk.Frame(table_frame, borderwidth=1, relief="solid")
+                    image_frame.grid(row=row_index, column=0, padx=5, pady=5)
+
+                    img_width, img_height = img.width(), img.height()
+
+                    canvas = tk.Canvas(image_frame, width=100, height=100)
+                    canvas.pack(side="left", fill="both", expand=True)
+
+                    scroll_x = tk.Scrollbar(image_frame, orient="horizontal", command=canvas.xview)
+                    scroll_x.pack(side="bottom", fill="x")
+                    scroll_y = tk.Scrollbar(image_frame, orient="vertical", command=canvas.yview)
+                    scroll_y.pack(side="right", fill="y")
+
+                    canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
+
+                    canvas.create_image(0, 0, anchor="nw", image=img)
+                    canvas.image = img
+
+                    canvas.config(scrollregion=(0, 0, img_width, img_height))
+                    
                     self.execution_image_references.append(img)
 
-                options_frame = tk.Frame(region_frame)
-                options_frame.pack(side="left")
+                filename_label = tk.Label(table_frame, text=str(region[1]), anchor="w", borderwidth=1, relief="solid")
+                filename_label.grid(row=row_index, column=1, padx=5, pady=5)
 
-                label = tk.Label(options_frame, text=region[1])
-                label.pack()
+                threshold_label = tk.Label(table_frame, text=str(region[8]), anchor="w", borderwidth=1, relief="solid")
+                threshold_label.grid(row=row_index, column=2, padx=5, pady=5)
+
+                offset_label = tk.Label(table_frame, text=f"({offset_x}, {offset_y})", anchor="w", borderwidth=1, relief="solid")
+                offset_label.grid(row=row_index, column=3, padx=5, pady=5)
+
+
+                options_frame = tk.Frame(table_frame, borderwidth=1, relief="solid")
+                options_frame.grid(row=row_index, column=4, padx=5, pady=5)
+
+                modify_offset_button = ttk.Button(options_frame, text="Modificar Offset", command=lambda fn=region[1]: self.modify_offset(fn))
+                modify_offset_button.pack(side="left", padx=2)
 
                 click_button = ttk.Button(options_frame, text="Click", command=lambda fn=region[1]: self.add_action("Click", fn))
-                click_button.pack(side="left", padx=5)
+                click_button.pack(side="left", padx=2)
 
                 click_and_fill_button = ttk.Button(options_frame, text="Click y Escribir", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
-                click_and_fill_button.pack(side="left", padx=5)
+                click_and_fill_button.pack(side="left", padx=2)
 
                 wait_image_button = ttk.Button(options_frame, text="Wait Image", command=lambda fn=region[1]: self.add_action("Wait Image", fn))
-                wait_image_button.pack(side="left", padx=5)
+                wait_image_button.pack(side="left", padx=2)
+
+                row_index += 1
+
+    def modify_offset(self, filename):
+        image_data, offset_x, offset_y = self.db.get_image_data(filename)
+        if image_data:
+            image_array = np.frombuffer(image_data, np.uint8)
+            region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+            if region_image is not None:
+                offset_window = tk.Toplevel(self.root)
+                offset_window.title("Modificar Offset")
+                offset_window.geometry("400x400")
+
+                region_image_rgb = cv2.cvtColor(region_image, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(region_image_rgb)
+                tk_image = ImageTk.PhotoImage(pil_img)
+
+                canvas = tk.Canvas(offset_window, width=pil_img.width, height=pil_img.height)
+                canvas.create_image(0, 0, anchor="nw", image=tk_image)
+                canvas.image = tk_image
+
+                canvas.pack()
+
+                new_offset = {"x": offset_x, "y": offset_y}
+
+                def on_click(event):
+                    new_offset["x"] = event.x
+                    new_offset["y"] = event.y
+
+                    canvas.delete("click_marker")
+                    canvas.create_oval(event.x - 3, event.y - 3, event.x + 3, event.y + 3, fill="red", tags="click_marker")
+
+                canvas.bind("<Button-1>", on_click)
+
+                def save_offset():
+                    self.db.update_offset(filename, new_offset["x"], new_offset["y"])
+                    messagebox.showinfo("Resultado", "Offset actualizado exitosamente.")
+                    offset_window.destroy()
+                    self.update_execution_tab()
+
+                save_button = tk.Button(offset_window, text="Guardar Offset", command=save_offset)
+                save_button.pack(pady=10)
 
 
     def delete_region(self, filename):
@@ -456,67 +580,28 @@ class MainMenu:
         if image_data:
             image_array = np.frombuffer(image_data, np.uint8)
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        else:
+            messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+            return False
 
         if region_image is None:
             messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
             return False
-        
+
         matcher = ImageMatcher(int(self.selected_monitor.get()) - 1)
+
         while time.time() - start_time < timeout:
             matched_image, found, top_left = matcher.match_image(region_image)
             if found:
                 return True
+
             time.sleep(interval)
 
-        messagebox.showwarning("Wait Image", f"No se detectó la imagen {filename} en el tiempo límite.")
+        messagebox.showwarning("Wait Image", f"No se detectó la imagen '{filename}' en el tiempo límite de {timeout} segundos.")
         return False
     
-    def detect_match_in_screenshot(self, filename):
-        region_image = cv2.imread(filename)
-        
-        if region_image is not None:
-            monitor_index = int(self.selected_monitor.get()) - 1
-            try:
-                screenshot, monitor_info = self.screen_capture.capture_monitor(monitor_index)
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
-                return
-
-            matcher = ImageMatcher(monitor_index)
-            matched_image, found, top_left = matcher.match_image(region_image)
-
-            if found:
-                bottom_right = (top_left[0] + region_image.shape[1], top_left[1] + region_image.shape[0])
-                cv2.rectangle(matched_image, top_left, bottom_right, (0, 255, 0), 3)
-
-                matched_image_rgb = cv2.cvtColor(matched_image, cv2.COLOR_BGR2RGB)
-                pil_image = Image.fromarray(matched_image_rgb)
-                tk_image = ImageTk.PhotoImage(pil_image)
-
-                match_window = tk.Toplevel(self.root)
-                match_window.title("Coincidencia Detectada")
-                match_window.geometry("600x400")
-
-                canvas = tk.Canvas(match_window, width=600, height=400)
-                scroll_x = tk.Scrollbar(match_window, orient="horizontal", command=canvas.xview)
-                scroll_y = tk.Scrollbar(match_window, orient="vertical", command=canvas.yview)
-
-                canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
-
-                canvas.pack(side="left", fill="both", expand=True)
-                scroll_x.pack(side="bottom", fill="x")
-                scroll_y.pack(side="right", fill="y")
-
-                canvas.create_image(0, 0, anchor="nw", image=tk_image)
-                canvas.image = tk_image
-                canvas.config(scrollregion=canvas.bbox("all"))
-            else:
-                messagebox.showwarning("Detectar", "No se encontró ninguna coincidencia en la captura actual.")
-        else:
-            messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
-
     def detect_all_matches_with_threshold(self, filename):
-        image_data = self.db.get_image_data(filename)
+        image_data, saved_threshold = self.db.get_image_data_and_threshold(filename)
         if image_data:
             image_array = np.frombuffer(image_data, np.uint8)
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
@@ -534,7 +619,7 @@ class MainMenu:
 
         detect_window = tk.Toplevel(self.root)
         detect_window.title("Detectar Coincidencias")
-        detect_window.geometry("800x600")
+        detect_window.geometry("1000x1000")
 
         canvas = tk.Canvas(detect_window, width=800, height=550)
         scroll_x = tk.Scrollbar(detect_window, orient="horizontal", command=canvas.xview)
@@ -548,6 +633,9 @@ class MainMenu:
         screenshot_rgb = cv2.cvtColor(screenshot, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(screenshot_rgb)
         tk_image = ImageTk.PhotoImage(pil_image)
+
+        match_count_label = tk.Label(detect_window, text="Coincidencias encontradas: 0")
+        match_count_label.pack()
 
         def update_matches(threshold):
             match_image = screenshot.copy()
@@ -565,12 +653,78 @@ class MainMenu:
             canvas.image = tk_match_image
             canvas.config(scrollregion=canvas.bbox("all"))
 
-        threshold_slider = tk.Scale(detect_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal", label="Threshold de Coincidencia", command=update_matches)
-        threshold_slider.set(0.8)
+            match_count_label.config(text=f"Coincidencias encontradas: {len(all_matches)}")
+
+        threshold_slider = tk.Scale(detect_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal",
+                                    label="Threshold de Coincidencia", command=update_matches)
+        threshold_slider.set(saved_threshold if saved_threshold is not None else 0.8)
         threshold_slider.pack(side="bottom", fill="x")
+
+        def save_threshold():
+            new_threshold = threshold_slider.get()
+            self.db.update_threshold(filename, new_threshold)
+            messagebox.showinfo("Threshold Guardado", f"El threshold ha sido actualizado a {new_threshold}.")
+
+        save_button = tk.Button(detect_window, text="Guardar Threshold", command=save_threshold)
+        save_button.pack(side="bottom", pady=10)
 
         update_matches(threshold_slider.get())
 
+    def get_threshold_and_matches(self):
+        """Muestra una ventana con un slider para ajustar el threshold y visualizar coincidencias en la captura de pantalla completa."""
+        threshold_window = tk.Toplevel(self.root)
+        threshold_window.title("Seleccionar Threshold")
+        threshold_window.geometry("1000x1000")
+        
+        threshold_var = tk.DoubleVar(value=0.8)  
+        tk.Label(threshold_window, text="Seleccione el threshold de coincidencia:").pack(pady=10)
+        threshold_slider = tk.Scale(threshold_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal", variable=threshold_var)
+        threshold_slider.pack()
+
+        image_frame = tk.Frame(threshold_window)
+        image_frame.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(image_frame, width=780, height=500)
+        scroll_x = tk.Scrollbar(image_frame, orient="horizontal", command=canvas.xview)
+        scroll_y = tk.Scrollbar(image_frame, orient="vertical", command=canvas.yview)
+        
+        canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
+        scroll_x.pack(side="bottom", fill="x")
+        scroll_y.pack(side="right", fill="y")
+        canvas.pack(fill="both", expand=True)
+
+        monitor_index = int(self.selected_monitor.get()) - 1
+        screen_image, _ = self.screen_capture.capture_monitor(monitor_index)
+
+        def display_image_with_matches(threshold):
+            matcher = ImageMatcher(monitor_index)
+            matched_image, found_points, _ = matcher.match_image_with_threshold(screen_image, region_image, threshold)
+            
+            matched_image_rgb = cv2.cvtColor(matched_image, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(matched_image_rgb)
+            tk_image = ImageTk.PhotoImage(pil_image)
+            
+            canvas.create_image(0, 0, anchor="nw", image=tk_image)
+            canvas.image = tk_image
+            canvas.config(scrollregion=canvas.bbox("all"))
+
+            count_label.config(text=f"Coincidencias encontradas: {len(found_points)}")
+
+        region_image = self.screen_capture.get_region_image(self.selector.selected_regions[-1])
+
+        threshold_slider.config(command=lambda value: display_image_with_matches(float(value)))
+
+        count_label = tk.Label(threshold_window, text="Coincidencias encontradas: 0")
+        count_label.pack()
+
+        confirm = tk.Button(threshold_window, text="Confirmar", command=threshold_window.destroy)
+        confirm.pack(pady=10)
+
+        threshold_window.transient(self.root)
+        threshold_window.grab_set()
+        self.root.wait_window(threshold_window)
+
+        return threshold_var.get(), region_image
 
 
     def run(self):
