@@ -18,7 +18,7 @@ class ScreenshootView:
     def __init__(self, root: tk.Tk, notebook: Notebook):
         self.frame = tk.Frame(notebook)
         self.root = root
-        notebook.add(self.frame, text="Ejecución en Cadena")
+        notebook.add(self.frame, text="Capturar Monitor")
 
         self.db = DBHandler()
         self.screen_capture = ScreenCapture()
@@ -29,17 +29,21 @@ class ScreenshootView:
 
     def setup_tab_ui(self):
 
-        ttk.Label(self.frame, text="Seleccione Monitor").pack(pady=10)
-        monitor_menu = ttk.OptionMenu(self.frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))])
-        monitor_menu.pack(pady=1)
+        screen_options_frame = tk.Frame(self.frame)
+        screen_options_frame.pack(pady=20)
 
-        capture_button = ttk.Button(self.frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)
-        capture_button.pack(pady=10)
+        tk.Label(screen_options_frame, text="Seleccione Monitor:").pack(side="left", padx=5)
+
+        monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))])
+        monitor_menu.pack(side="left", padx=5)
+
+        capture_button = ttk.Button(screen_options_frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)
+        capture_button.pack(side="left", padx=5)
 
         self.canvas_frame = tk.Frame(self.frame)
         self.canvas_frame.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(self.canvas_frame)
+        self.canvas = tk.Canvas(self.canvas_frame, width=500, height=500)
         self.scroll_x = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
         self.scroll_y = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(xscrollcommand=self.scroll_x.set, yscrollcommand=self.scroll_y.set)
@@ -47,13 +51,20 @@ class ScreenshootView:
         self.scroll_y.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
 
+        self.frame.update_idletasks()
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+
         self.regions_frame = tk.Frame(self.frame)
         self.regions_frame.pack(fill="both", expand=True)
 
         save_button = ttk.Button(self.frame, text="Guardar Imagen", command=self.save_region)
         save_button.pack(pady=5)
+
         view_button = ttk.Button(self.frame, text="Ver Regiones", command=self.show_saved_regions)
         view_button.pack(pady=5)
+
+        self.canvas.bind("<Enter>", self._bind_mouse_scroll) 
+        self.canvas.bind("<Leave>", self._unbind_mouse_scroll)
 
     def show_screenshot(self):
         monitor_index = int(self.selected_monitor.get()) - 1
@@ -63,7 +74,7 @@ class ScreenshootView:
             messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
             return
 
-        self.root.geometry(f"{monitor_info['width']}x{monitor_info['height']}")
+        #self.root.geometry(f"{monitor_info['width']}x{monitor_info['height']}")
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(image_rgb)
         tk_image = ImageTk.PhotoImage(pil_image)
@@ -118,6 +129,9 @@ class ScreenshootView:
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scroll_y.set)
+
+        canvas.bind("<Enter>", self._bind_mouse_scroll)
+        canvas.bind("<Leave>", self._unbind_mouse_scroll)
 
         canvas.pack(side="left", fill="both", expand=True)
         scroll_y.pack(side="right", fill="y")
@@ -405,3 +419,12 @@ class ScreenshootView:
 
         confirm_button = tk.Button(offset_window, text="Confirmar Punto de Clic", command=confirm_click_offset)
         confirm_button.pack(pady=10)
+
+    def _bind_mouse_scroll(self, event):
+        self.canvas.bind_all("<MouseWheel>", self._on_mouse_wheel)
+
+    def _unbind_mouse_scroll(self, event):
+        self.canvas.unbind_all("<MouseWheel>")
+
+    def _on_mouse_wheel(self, event):
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")

@@ -5,16 +5,17 @@ import numpy as np
 from PIL import Image, ImageTk
 from tkinter import ttk
 from database.db_handler import DBHandler
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 from utils.click_handler import ClickHandler
 from utils.image_matcher import ImageMatcher
 import time
+import os
 
 class ExecutionView:
     def __init__(self, root: tk.Tk, notebook: Notebook):
         self.frame = tk.Frame(notebook)
         self.root = root
-        notebook.add(self.frame, text="Ejecución en Cadena")
+        notebook.add(self.frame, text="Ejecución")
 
         self.selected_monitor = tk.StringVar(value="1")
 
@@ -41,8 +42,19 @@ class ExecutionView:
         delete_button = ttk.Button(self.frame, text="Eliminar Acción Seleccionada", command=self.delete_action)
         delete_button.pack(pady=5)
 
-        self.actions_listbox = tk.Listbox(self.frame, selectmode=tk.SINGLE)
-        self.actions_listbox.pack(fill="both", expand=True)
+        export_button = tk.Button(self.frame, text="Exportar Imágenes", command=self.export_images)
+        export_button.pack(pady=10)
+
+        listbox_frame = tk.Frame(self.frame)
+        listbox_frame.pack(fill="both", expand=True)
+
+        self.actions_listbox = tk.Listbox(listbox_frame, selectmode=tk.SINGLE)
+        self.actions_listbox.pack(side="left", fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.actions_listbox.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        self.actions_listbox.configure(yscrollcommand=scrollbar.set)
 
         self.load_regions_for_execution()
 
@@ -66,7 +78,28 @@ class ExecutionView:
 
         search_text = self.search_var.get().lower()
 
-        table_frame = tk.Frame(self.actions_frame)
+        container = tk.Frame(self.actions_frame)
+        container.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(container)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        table_frame = tk.Frame(scrollable_frame)
         table_frame.pack(fill="both", expand=True)
 
         tk.Label(table_frame, text="Imagen", width=20, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=0, padx=5, pady=5)
@@ -86,10 +119,10 @@ class ExecutionView:
                 if image_data:
                     image_array = np.frombuffer(image_data, np.uint8)
                     region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-                    
+
                     if offset_x is not None and offset_y is not None:
                         cv2.circle(region_image, (offset_x, offset_y), radius=5, color=(0, 0, 255), thickness=-1)
-                    
+
                     region_image_rgb = cv2.cvtColor(region_image, cv2.COLOR_BGR2RGB)
                     pil_img = Image.fromarray(region_image_rgb)
                     img = ImageTk.PhotoImage(pil_img)
@@ -97,23 +130,19 @@ class ExecutionView:
                     image_frame = tk.Frame(table_frame, borderwidth=1, relief="solid")
                     image_frame.grid(row=row_index, column=0, padx=5, pady=5)
 
-                    img_width, img_height = img.width(), img.height()
+                    image_canvas = tk.Canvas(image_frame, width=100, height=100)
+                    image_canvas.pack(side="left", fill="both", expand=True)
 
-                    canvas = tk.Canvas(image_frame, width=100, height=100)
-                    canvas.pack(side="left", fill="both", expand=True)
-
-                    scroll_x = tk.Scrollbar(image_frame, orient="horizontal", command=canvas.xview)
+                    scroll_x = tk.Scrollbar(image_frame, orient="horizontal", command=image_canvas.xview)
                     scroll_x.pack(side="bottom", fill="x")
-                    scroll_y = tk.Scrollbar(image_frame, orient="vertical", command=canvas.yview)
+                    scroll_y = tk.Scrollbar(image_frame, orient="vertical", command=image_canvas.yview)
                     scroll_y.pack(side="right", fill="y")
 
-                    canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
+                    image_canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
 
-                    canvas.create_image(0, 0, anchor="nw", image=img)
-                    canvas.image = img
+                    image_canvas.create_image(0, 0, anchor="nw", image=img)
+                    image_canvas.config(scrollregion=image_canvas.bbox("all"))
 
-                    canvas.config(scrollregion=(0, 0, img_width, img_height))
-                    
                     self.execution_image_references.append(img)
 
                 filename_label = tk.Label(table_frame, text=str(region[1]), anchor="w", borderwidth=1, relief="solid")
@@ -124,7 +153,6 @@ class ExecutionView:
 
                 offset_label = tk.Label(table_frame, text=f"({offset_x}, {offset_y})", anchor="w", borderwidth=1, relief="solid")
                 offset_label.grid(row=row_index, column=3, padx=5, pady=5)
-
 
                 options_frame = tk.Frame(table_frame, borderwidth=1, relief="solid")
                 options_frame.grid(row=row_index, column=4, padx=5, pady=5)
@@ -140,6 +168,9 @@ class ExecutionView:
 
                 wait_image_button = ttk.Button(options_frame, text="Wait Image", command=lambda fn=region[1]: self.add_action("Wait Image", fn))
                 wait_image_button.pack(side="left", padx=2)
+
+                click_download = ttk.Button(options_frame, text="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
+                click_download.pack(side="left", padx=2)
 
                 row_index += 1
 
@@ -291,3 +322,49 @@ class ExecutionView:
                 messagebox.showinfo("Resultado", "No se encontraron coincidencias.")
         else:
             messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+
+    def download_image(self, filename):
+        save_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
+        if save_path:
+            try:
+                image_data = self.db.get_image_data(filename)
+
+                if image_data:
+                    image_array = np.frombuffer(image_data, np.uint8)
+                    img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                    if img is not None:
+                        cv2.imwrite(save_path, img)
+                        messagebox.showinfo("Guardado", f"Imagen guardada exitosamente en {save_path}")
+                    else:
+                        messagebox.showerror("Error", "No se pudo decodificar la imagen desde los datos binarios.")
+                else:
+                    messagebox.showerror("Error", f"No se encontró la imagen en la base de datos para el archivo: {filename}")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo guardar la imagen: {e}")
+
+    def export_images(self):
+        base_folder_path = filedialog.askdirectory(title="Selecciona la carpeta base para guardar las imágenes")
+        
+        if base_folder_path:
+            subfolder_name = simpledialog.askstring("Nombre de Carpeta", "Ingrese el nombre de la subcarpeta para guardar las imágenes:")
+            
+            if subfolder_name:
+                target_folder = os.path.join(base_folder_path, subfolder_name)
+                os.makedirs(target_folder, exist_ok=True)
+
+                for action_type, filename, _ in self.actions_queue:
+                    image_data, _, _ = self.db.get_image_data(filename)
+                    if image_data:
+                        image_array = np.frombuffer(image_data, np.uint8)
+                        region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                        if region_image is not None:
+                            image_path = os.path.join(target_folder, f"{filename}.png")
+                            cv2.imwrite(image_path, region_image)
+
+                messagebox.showinfo("Exportación Completa", f"Todas las imágenes han sido exportadas a la carpeta '{target_folder}'.")
+            else:
+                messagebox.showwarning("Exportación Cancelada", "No se ingresó un nombre de subcarpeta. La exportación fue cancelada.")
+        else:
+            messagebox.showwarning("Exportación Cancelada", "No se seleccionó ningún directorio. La exportación fue cancelada.")

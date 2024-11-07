@@ -15,6 +15,7 @@ from .styles import Styles
 import numpy as np
 from .execution_view import ExecutionView
 from .screenshot_view import ScreenshootView
+from .steps_view import StepsView
 
 class MainMenu:
     def __init__(self):
@@ -24,6 +25,13 @@ class MainMenu:
         self.db = DBHandler()
         self.actions_queue = []
 
+        style = ttk.Style()
+        style.theme_use('default')
+
+        style.configure("TNotebook", background="lightblue", borderwidth=0)
+        style.configure("TNotebook.Tab", background="lightgrey", padding=10, font=('Helvetica', 12, 'bold'))
+        style.map("TNotebook.Tab", background=[("selected", "#006A67")])
+
         self._setup_ui()
 
     def _setup_ui(self):
@@ -32,31 +40,15 @@ class MainMenu:
         notebook.pack(fill="both", expand=True)
 
         self.tab1 = ScreenshootView(self.root, notebook)
-
         self.tab2 = ExecutionView(self.root, notebook)
-
-        self.tab3 = tk.Frame(notebook)
-        notebook.add(self.tab3, text="Pasos")
+        #self.tab3 = StepsView(self.root, notebook)
 
         notebook.bind("<<NotebookTabChanged>>", lambda event: self.on_tab_selected(event, notebook))
-
-        self.setup_steps_tab()
 
     def on_tab_selected(self, event, notebook):
         selected_tab = notebook.index(notebook.select())
         if selected_tab == 1:
             self.tab2.update_execution_tab()
-
-    
-    def setup_steps_tab(self):
-        self.steps_frame = tk.Frame(self.tab3)
-        self.steps_frame.pack(fill="both", expand=True)
-
-        tk.Label(self.steps_frame, text="Pasos").pack()
-        ttk.OptionMenu(self.steps_frame, variable=tk.StringVar()).pack()
-
-        ttk.Button(self.steps_frame, text="Crear").pack()
-
 
     def save_regions(self):
         if self.image is not None:
