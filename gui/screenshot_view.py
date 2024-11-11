@@ -12,6 +12,7 @@ from screenshot.capture import ScreenCapture
 import io
 from utils.image_matcher import ImageMatcher
 import os
+import pytesseract
 
 
 class ScreenshootView:
@@ -19,6 +20,11 @@ class ScreenshootView:
         self.frame = tk.Frame(notebook)
         self.root = root
         notebook.add(self.frame, text="Capturar Monitor")
+
+        self.image = None
+        self.selector = None
+
+        self.recognized_text = ""
 
         self.db = DBHandler()
         self.screen_capture = ScreenCapture()
@@ -37,11 +43,15 @@ class ScreenshootView:
         monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))])
         monitor_menu.pack(side="left", padx=5)
 
+
+        display_frame = tk.Frame(self.frame)
+        display_frame.pack(fill="both", expand=True)
+
+        self.canvas_frame = tk.Frame(display_frame)
+        self.canvas_frame.pack(side="left", fill="both", expand=True)
+
         capture_button = ttk.Button(screen_options_frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)
         capture_button.pack(side="left", padx=5)
-
-        self.canvas_frame = tk.Frame(self.frame)
-        self.canvas_frame.pack(fill="both", expand=True)
 
         self.canvas = tk.Canvas(self.canvas_frame, width=500, height=500)
         self.scroll_x = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
@@ -63,27 +73,35 @@ class ScreenshootView:
         view_button = ttk.Button(self.frame, text="Ver Regiones", command=self.show_saved_regions)
         view_button.pack(pady=5)
 
+        self.text_display = tk.Text(display_frame, wrap="word", width=40, height=20)
+        self.text_display.pack(side="right", fill="y", padx=10)
+        self.text_display.insert("1.0", "Seleccione un área para reconocer texto...")
+        self.text_display.config(state="disabled")
+
+        recognize_text_button = ttk.Button(self.frame, text="Reconocer Texto en Área Seleccionada", command=self.recognize_text_in_selected_area)
+        recognize_text_button.pack(pady=5)
+
         self.canvas.bind("<Enter>", self._bind_mouse_scroll) 
         self.canvas.bind("<Leave>", self._unbind_mouse_scroll)
 
     def show_screenshot(self):
         monitor_index = int(self.selected_monitor.get()) - 1
         try:
-            image, monitor_info = self.screen_capture.capture_monitor(monitor_index)
+            self.image, _ = self.screen_capture.capture_monitor(monitor_index)
+            if self.image is not None:
+                image_rgb = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(image_rgb)
+                tk_image = ImageTk.PhotoImage(pil_image)
+                self.canvas.create_image(0, 0, anchor="nw", image=tk_image)
+                self.canvas.image = tk_image
+                self.canvas.config(scrollregion=self.canvas.bbox("all"))
+
+                self.selector = RegionSelector(self.canvas, self.image, self.update_text_display)
+            else:
+                messagebox.showerror("Error", "No se pudo capturar la imagen del monitor seleccionado.")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
-            return
 
-        #self.root.geometry(f"{monitor_info['width']}x{monitor_info['height']}")
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(image_rgb)
-        tk_image = ImageTk.PhotoImage(pil_image)
-
-        self.canvas.create_image(0, 0, anchor="nw", image=tk_image)
-        self.canvas.image = tk_image
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
-        self.selector = RegionSelector(self.canvas)
-        self.image = image
 
         self.coord_label = tk.Label(self.canvas, text="", bg="black", fg="white", font=("Arial", 10))
         self.coord_label.place(x=10, y=10)
@@ -277,6 +295,9 @@ class ScreenshootView:
             try:
                 image_data = self.db.get_image_data(filename)
 
+                if isinstance(image_data, tuple):
+                    image_data = image_data[0]
+
                 if image_data:
                     image_array = np.frombuffer(image_data, np.uint8)
                     img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
@@ -428,3 +449,71 @@ class ScreenshootView:
 
     def _on_mouse_wheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def recognize_text_in_selected_area(self):
+        if self.selector.selected_regions:
+            x1, y1, x2, y2 = self.selector.selected_regions[-1]
+            selected_region = self.image[y1:y2, x1:x2]
+
+            gray_region = cv2.cvtColor(selected_region, cv2.COLOR_BGR2GRAY)
+
+            self.recognized_text = pytesseract.image_to_string(gray_region)
+
+            if self.recognized_text.strip():
+                self.show_text_confirmation(x1, y1, x2, y2, selected_region)
+            else:
+                messagebox.showwarning("Texto No Encontrado", "No se pudo reconocer ningún texto en la región seleccionada.")
+        else:
+            messagebox.showerror("Error", "No hay una región seleccionada para reconocer el texto.")
+
+    def show_text_confirmation(self, x1, y1, x2, y2, selected_region):
+        confirmation_window = tk.Toplevel(self.root)
+        confirmation_window.title("Confirmar Texto Reconocido")
+
+        coords_text = f"Coordenadas: ({x1}, {y1}) - ({x2}, {y2})"
+        coords_label = tk.Label(confirmation_window, text=coords_text)
+        coords_label.pack(pady=5)
+
+        copy_button = ttk.Button(confirmation_window, text="Copiar Coordenadas", command=lambda: self.copy_to_clipboard(coords_text))
+        copy_button.pack(pady=5)
+
+        text_box = tk.Text(confirmation_window, wrap="word", width=50, height=10)
+        text_box.insert("1.0", self.recognized_text)
+        text_box.config(state="disabled")
+        text_box.pack(pady=10)
+
+        save_button = ttk.Button(confirmation_window, text="Guardar", command=lambda: self.save_text_and_region(x1, y1, x2, y2, selected_region, confirmation_window))
+        save_button.pack(side="left", padx=10)
+
+        cancel_button = ttk.Button(confirmation_window, text="Cancelar", command=confirmation_window.destroy)
+        cancel_button.pack(side="right", padx=10)
+
+    def copy_to_clipboard(self, text):
+        """Copia el texto al portapapeles del sistema."""
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        messagebox.showinfo("Copiado", "Coordenadas copiadas al portapapeles.")
+
+    def save_text_and_region(self, x1, y1, x2, y2, selected_region, confirmation_window):
+        filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
+        if filename:
+            filename = f"{filename}.png" if not filename.endswith(".png") else filename
+            _, buffer = cv2.imencode('.png', selected_region)
+            image_data = buffer.tobytes()
+            threshold = 0.8
+
+            self.db.insert_region_with_recognition(filename, x1, y1, x2, y2, image_data, threshold, self.recognized_text)
+
+            messagebox.showinfo("Guardado", f"Región guardada exitosamente como '{filename}'")
+            confirmation_window.destroy()
+        else:
+            messagebox.showwarning("Advertencia", "No se ingresó un nombre de archivo. Operación de guardado cancelada.")
+
+    def update_text_display(self, text):
+        self.text_display.config(state="normal")
+        self.text_display.delete("1.0", tk.END)
+        if text.strip():
+            self.text_display.insert("1.0", text)
+        else:
+            self.text_display.insert("1.0", "No hay texto reconocible en la región seleccionada.")
+        self.text_display.config(state="disabled")

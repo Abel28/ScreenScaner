@@ -328,6 +328,8 @@ class ExecutionView:
         if save_path:
             try:
                 image_data = self.db.get_image_data(filename)
+                if isinstance(image_data, tuple):
+                    image_data = image_data[0]
 
                 if image_data:
                     image_array = np.frombuffer(image_data, np.uint8)

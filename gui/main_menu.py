@@ -21,7 +21,7 @@ class MainMenu:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Image Detector Test tool")
-        self.root.geometry("1000x1000")
+        self.root.geometry("1000x700")
         self.db = DBHandler()
         self.actions_queue = []
 

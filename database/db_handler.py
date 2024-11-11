@@ -3,9 +3,9 @@ import sqlite3
 class DBHandler:
     def __init__(self, db_name="regions.db"):
         self.conn = sqlite3.connect(db_name)
-        self.create_table()
+        self.create_tables()
 
-    def create_table(self):
+    def create_tables(self):
         with self.conn:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS regions (
@@ -23,12 +23,32 @@ class DBHandler:
                 )
             """)
 
-    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.8, click_offset=(0, 0)):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO regions (filename, x1, y1, x2, y2, image, threshold, click_x, click_y)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (filename, x1, y1, x2, y2, image_data, threshold, click_offset[0], click_offset[1]))
+                CREATE TABLE IF NOT EXISTS image_recognitions (
+                    id INTEGER PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    x1 INTEGER NOT NULL,
+                    y1 INTEGER NOT NULL,
+                    x2 INTEGER NOT NULL,
+                    y2 INTEGER NOT NULL,
+                    image BLOB,
+                    threshold REAL DEFAULT 0.8,
+                    recognized_text TEXT DEFAULT ''
+                )
+            """)
+
+        cursor = self.conn.cursor()
+        cursor.execute("PRAGMA table_info(regions)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if 'recognized_text' not in columns:
+            with self.conn:
+                self.conn.execute("ALTER TABLE regions ADD COLUMN recognized_text TEXT DEFAULT ''")
+        
+        if 'image_recognition_id' not in columns:
+            with self.conn:
+                self.conn.execute("ALTER TABLE regions ADD COLUMN image_recognition_id INTEGER REFERENCES image_recognitions(id)")
 
     def get_all_regions(self):
         with self.conn:
@@ -63,15 +83,6 @@ class DBHandler:
                 cursor.close()
 
     def get_image_data(self, filename):
-        """
-        Recupera los datos de la imagen y el offset guardado en la base de datos.
-
-        Args:
-            filename (str): El nombre del archivo de la región en la base de datos.
-
-        Returns:
-            tuple: (image_data, click_x, click_y) o (None, None, None) si no se encuentra.
-        """
         with self.conn:
             cursor = self.conn.execute("""
                 SELECT image, click_x, click_y FROM regions WHERE filename = ?
@@ -111,5 +122,33 @@ class DBHandler:
                 UPDATE regions SET click_x = ?, click_y = ? WHERE filename = ?
             """, (click_x, click_y, filename))
 
+    def insert_image_recognition(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.8, recognized_text="", click_offset=(0, 0)):
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO image_recognitions (filename, x1, y1, x2, y2, image, threshold, recognized_text, click_x, click_y)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (filename, x1, y1, x2, y2, image_data, threshold, recognized_text, click_offset[0], click_offset[1]))
+
+    def insert_region_with_recognition(self, filename, x1, y1, x2, y2, image_data, threshold, recognized_text):
+        with self.conn:
+            cursor = self.conn.execute("""
+                INSERT INTO image_recognitions (filename, x1, y1, x2, y2, image, threshold, recognized_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (filename, x1, y1, x2, y2, image_data, threshold, recognized_text))
+
+            image_recognition_id = cursor.lastrowid
+
+            self.conn.execute("""
+                INSERT INTO regions (filename, x1, y1, x2, y2, image, threshold, image_recognition_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (filename, x1, y1, x2, y2, image_data, threshold, image_recognition_id))
+
     def close(self):
         self.conn.close()
+
+    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.8, click_offset=(0, 0)):
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO regions (filename, x1, y1, x2, y2, image, threshold, click_x, click_y)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (filename, x1, y1, x2, y2, image_data, threshold, click_offset[0], click_offset[1]))
