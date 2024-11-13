@@ -470,7 +470,7 @@ class ScreenshootView:
         confirmation_window = tk.Toplevel(self.root)
         confirmation_window.title("Confirmar Texto Reconocido")
 
-        coords_text = f"Coordenadas: ({x1}, {y1}) - ({x2}, {y2})"
+        coords_text = f"({x1}, {y1}, {x2-x1}, {y2-y1})"
         coords_label = tk.Label(confirmation_window, text=coords_text)
         coords_label.pack(pady=5)
 
