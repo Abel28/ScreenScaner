@@ -1,34 +1,34 @@
 import pyautogui
 import cv2
-from screenshot.capture import ScreenCapture
-from utils.image_matcher import ImageMatcher
-from tkinter import messagebox
-import time
+from PIL import ImageGrab
+import numpy as np
+from screeninfo import get_monitors
 
 class ClickHandler:
     def __init__(self, monitor_index, timeout=5):
         self.monitor_index = monitor_index
-        self.screen_capture = ScreenCapture()
+        self.monitor = get_monitors()[monitor_index]
         self.timeout = timeout
 
     def click_on_match(self, region_image, offset_x=0, offset_y=0):
-        matcher = ImageMatcher(self.monitor_index)
-        start_time = time.time()
-        
-        while time.time() - start_time < self.timeout:
-            matched_image, found, top_left = matcher.match_image(region_image)
+        left = self.monitor.x
+        top = self.monitor.y
+        right = left + self.monitor.width
+        bottom = top + self.monitor.height
 
-            if found:
-                monitor_info = self.screen_capture.get_monitors()[self.monitor_index]
-                click_x = monitor_info["left"] + top_left[0] + offset_x
-                click_y = monitor_info["top"] + top_left[1] + offset_y
+        screen_image = ImageGrab.grab(bbox=(left, top, right, bottom))
+        screen_image = cv2.cvtColor(np.array(screen_image), cv2.COLOR_RGB2BGR)
 
-                pyautogui.click(click_x, click_y)
-                return True, (click_x, click_y)
+        result = cv2.matchTemplate(screen_image, region_image, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
-            time.sleep(0.1)
-        
-        messagebox.showerror("Timeout Error", f"No se encontró coincidencia en {self.timeout} segundos.")
+        threshold = 0.8
+        if max_val >= threshold:
+            click_x = left + max_loc[0] + offset_x
+            click_y = top + max_loc[1] + offset_y
+
+            pyautogui.click(click_x, click_y)
+            return True, (click_x, click_y)
         return False, None
 
     def click_and_type(self, region_image, text, offset_x=0, offset_y=0):

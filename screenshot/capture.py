@@ -1,6 +1,8 @@
 import mss
 import numpy as np
 import cv2
+from screeninfo import get_monitors
+from PIL import ImageGrab
 
 class ScreenCapture:
     def __init__(self):
@@ -12,40 +14,36 @@ class ScreenCapture:
         return monitors
 
     def capture_monitor(self, monitor_index):
-        monitors = self.get_monitors()
+        monitors = get_monitors()
         
         if monitor_index < 0 or monitor_index >= len(monitors):
             raise ValueError("Índice de monitor fuera de rango.")
         
         monitor = monitors[monitor_index]
-        screenshot = self.sct.grab(monitor)
+        left, top = monitor.x, monitor.y
+        right = left + monitor.width
+        bottom = top + monitor.height
+
+        screen_image = ImageGrab.grab(bbox=(left, top, right, bottom))
         
-        self.image = np.array(screenshot)
-        self.image = cv2.cvtColor(self.image, cv2.COLOR_BGRA2BGR)
+        self.image = np.array(screen_image)
+        self.image = cv2.cvtColor(self.image, cv2.COLOR_RGB2BGR)
 
         return self.image, monitor
 
-    def get_region_image(self, region_coords):
-        """
-        Recorta y devuelve la imagen de una región específica de la captura de pantalla.
-        
-        Args:
-            region_coords (tuple): Coordenadas de la región en el formato (x1, y1, x2, y2).
-        
-        Returns:
-            region_image: Imagen de la región especificada.
-        """
+    def get_region_image(self, region):
         if self.image is None:
-            raise ValueError("No se ha capturado ninguna pantalla. Llama a capture_monitor primero.")
-
-        x1, y1, x2, y2 = region_coords
+            raise ValueError("No hay imagen capturada disponible.")
+        
+        x1, y1, x2, y2 = region
 
         height, width = self.image.shape[:2]
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(width, x2), min(height, y2)
-
-        if x2 > x1 and y2 > y1:
-            region_image = self.image[y1:y2, x1:x2]
-            return region_image
-        else:
+        if x1 < 0 or y1 < 0 or x2 > width or y2 > height or x1 >= x2 or y1 >= y2:
             raise ValueError("Región inválida o vacía. Verifica las coordenadas.")
+
+        region_image = self.image[y1:y2, x1:x2]
+
+        if region_image.size == 0:
+            raise ValueError("La región seleccionada está vacía.")
+        
+        return region_image

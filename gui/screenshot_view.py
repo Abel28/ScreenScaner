@@ -23,6 +23,7 @@ class ScreenshootView:
 
         self.image = None
         self.selector = None
+        self.update_id = None
 
         self.recognized_text = ""
 
@@ -52,6 +53,9 @@ class ScreenshootView:
 
         capture_button = ttk.Button(screen_options_frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)
         capture_button.pack(side="left", padx=5)
+        
+        fullscreen_button = ttk.Button(screen_options_frame, text="Abrir en Pantalla Completa", command=self.show_fullscreen_screenshot)
+        fullscreen_button.pack(pady=5)
 
         self.canvas = tk.Canvas(self.canvas_frame, width=500, height=500)
         self.scroll_x = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
@@ -83,8 +87,56 @@ class ScreenshootView:
 
         self.canvas.bind("<Enter>", self._bind_mouse_scroll) 
         self.canvas.bind("<Leave>", self._unbind_mouse_scroll)
+        
+    def show_fullscreen_screenshot(self):
+        monitor_index = int(self.selected_monitor.get()) - 1
+        if self.image is None:
+            messagebox.showerror("Error", "No hay captura de pantalla para mostrar.")
+            return
+
+        self.fullscreen_window = tk.Toplevel(self.root)
+        self.fullscreen_window.attributes("-fullscreen", True)
+
+        self.image, _ = self.screen_capture.capture_monitor(monitor_index)
+        image_rgb = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+        tk_image = ImageTk.PhotoImage(pil_image)
+
+        fullscreen_canvas = tk.Canvas(self.fullscreen_window)
+        fullscreen_canvas.pack(fill="both", expand=True)
+        fullscreen_canvas.create_image(0, 0, anchor="nw", image=tk_image)
+        fullscreen_canvas.image = tk_image
+
+        self.fullscreen_selector = RegionSelector(fullscreen_canvas, self.image, self.update_text_display)
+
+        close_button = ttk.Button(self.fullscreen_window, text="Cerrar", command=self.fullscreen_window.destroy)
+        close_button.place(x=20, y=20)
+        close_button.place_forget()
+
+        save_button = ttk.Button(self.fullscreen_window, text="Guardar Imagen", command=self.save_and_close_fullscreen)
+        save_button.place(x=20, y=60)
+        save_button.place_forget()
+
+        def toggle_buttons(event=None):
+            if close_button.winfo_ismapped():
+                close_button.place_forget()
+                save_button.place_forget()
+            else:
+                close_button.place(x=20, y=20)
+                save_button.place(x=20, y=60)
+
+        self.fullscreen_window.bind("<Escape>", toggle_buttons)
+        fullscreen_canvas.bind("<Button-3>", toggle_buttons)
+        
+        
+    def save_and_close_fullscreen(self):
+        if self.fullscreen_selector and self.fullscreen_selector.selected_regions:
+            self.selector = self.fullscreen_selector
+            self.fullscreen_window.destroy()
+            self.save_region()  
 
     def show_screenshot(self):
+        self.screen_capture = ScreenCapture()
         monitor_index = int(self.selected_monitor.get()) - 1
         try:
             self.image, _ = self.screen_capture.capture_monitor(monitor_index)
@@ -114,7 +166,7 @@ class ScreenshootView:
         self.canvas.bind("<Motion>", update_coordinates)
 
     def save_region(self):
-        if self.selector.selected_regions:
+        if self.selector and self.selector.selected_regions:
             x1, y1, x2, y2 = self.selector.selected_regions[-1]
 
             filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
@@ -125,7 +177,8 @@ class ScreenshootView:
                     return
 
                 filename = f"{filename}.png" if not filename.endswith(".png") else filename
-
+                
+                monitor_index = int(self.selected_monitor.get()) - 1
                 self.select_click_offset(filename, x1, y1, x2, y2, region_image, threshold)
             else:
                 messagebox.showwarning("Advertencia", "No se ingresó un nombre de archivo. Operación de guardado cancelada.")
@@ -196,8 +249,8 @@ class ScreenshootView:
         threshold_window = tk.Toplevel(self.root)
         threshold_window.title("Seleccionar Threshold")
         threshold_window.geometry("1000x1000")
-        
-        threshold_var = tk.DoubleVar(value=0.8)  
+
+        threshold_var = tk.DoubleVar(value=0.8)
         tk.Label(threshold_window, text="Seleccione el threshold de coincidencia:").pack(pady=10)
         threshold_slider = tk.Scale(threshold_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal", variable=threshold_var)
         threshold_slider.pack()
@@ -208,7 +261,7 @@ class ScreenshootView:
         canvas = tk.Canvas(image_frame, width=780, height=500)
         scroll_x = tk.Scrollbar(image_frame, orient="horizontal", command=canvas.xview)
         scroll_y = tk.Scrollbar(image_frame, orient="vertical", command=canvas.yview)
-        
+
         canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
         scroll_x.pack(side="bottom", fill="x")
         scroll_y.pack(side="right", fill="y")
@@ -217,23 +270,30 @@ class ScreenshootView:
         monitor_index = int(self.selected_monitor.get()) - 1
         screen_image, _ = self.screen_capture.capture_monitor(monitor_index)
 
+        region_coords = self.selector.selected_regions[-1]
+        region_image = self.screen_capture.get_region_image(region_coords)
+
+        def schedule_display_update(threshold):
+            if self.update_id is not None:
+                threshold_window.after_cancel(self.update_id)
+
+            self.update_id = threshold_window.after(200, lambda: display_image_with_matches(threshold))
+
         def display_image_with_matches(threshold):
             matcher = ImageMatcher(monitor_index)
             matched_image, found_points, _ = matcher.match_image_with_threshold(screen_image, region_image, threshold)
-            
+
             matched_image_rgb = cv2.cvtColor(matched_image, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(matched_image_rgb)
             tk_image = ImageTk.PhotoImage(pil_image)
-            
+
             canvas.create_image(0, 0, anchor="nw", image=tk_image)
             canvas.image = tk_image
             canvas.config(scrollregion=canvas.bbox("all"))
 
             count_label.config(text=f"Coincidencias encontradas: {len(found_points)}")
 
-        region_image = self.screen_capture.get_region_image(self.selector.selected_regions[-1])
-
-        threshold_slider.config(command=lambda value: display_image_with_matches(float(value)))
+        threshold_slider.config(command=lambda value: schedule_display_update(float(value)))
 
         count_label = tk.Label(threshold_window, text="Coincidencias encontradas: 0")
         count_label.pack()
@@ -451,20 +511,36 @@ class ScreenshootView:
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def recognize_text_in_selected_area(self):
-        if self.selector.selected_regions:
-            x1, y1, x2, y2 = self.selector.selected_regions[-1]
+        if self.selected_regions:
+            x1, y1, x2, y2 = self.selected_regions[-1]
             selected_region = self.image[y1:y2, x1:x2]
 
-            gray_region = cv2.cvtColor(selected_region, cv2.COLOR_BGR2GRAY)
+            if selected_region.size == 0:
+                print("La región seleccionada está vacía.")
+                return
 
-            self.recognized_text = pytesseract.image_to_string(gray_region)
+            try:
+                gray_region = cv2.cvtColor(selected_region, cv2.COLOR_BGR2GRAY)
+                recognized_text = pytesseract.image_to_string(gray_region)
+                self.update_text_callback(recognized_text)
+            except cv2.error as e:
+                print(f"Error al convertir a escala de grises: {e}")
+            
+    def recognize_text_in_region(self):
+        if self.selected_regions:
+            x1, y1, x2, y2 = self.selected_regions[-1]
+            selected_region = self.image[y1:y2, x1:x2]
 
-            if self.recognized_text.strip():
-                self.show_text_confirmation(x1, y1, x2, y2, selected_region)
-            else:
-                messagebox.showwarning("Texto No Encontrado", "No se pudo reconocer ningún texto en la región seleccionada.")
-        else:
-            messagebox.showerror("Error", "No hay una región seleccionada para reconocer el texto.")
+            if selected_region.size == 0:
+                print("La región seleccionada está vacía.")
+                return
+
+            try:
+                gray_region = cv2.cvtColor(selected_region, cv2.COLOR_BGR2GRAY)
+                recognized_text = pytesseract.image_to_string(gray_region)
+                self.update_text_callback(recognized_text)
+            except cv2.error as e:
+                print(f"Error al convertir a escala de grises: {e}")
 
     def show_text_confirmation(self, x1, y1, x2, y2, selected_region):
         confirmation_window = tk.Toplevel(self.root)
