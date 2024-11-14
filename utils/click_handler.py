@@ -7,15 +7,16 @@ from screenshot.capture import ScreenCapture
 class ClickHandler:
     def __init__(self, monitor_index, timeout=5):
         self.monitor_index = monitor_index
-        self.screen_capture = ScreenCapture
+        self.screen_capture = ScreenCapture()
         self.monitor = self.screen_capture.get_monitors()[monitor_index]
         self.timeout = timeout
 
     def click_on_match(self, region_image, offset_x=0, offset_y=0):
-        left = self.monitor.x
-        top = self.monitor.y
-        right = left + self.monitor.width
-        bottom = top + self.monitor.height
+        print(self.monitor)
+        left = self.monitor["left"]
+        top = self.monitor["top"]
+        right = left + self.monitor["width"]
+        bottom = top + self.monitor["height"]
 
         screen_image = ImageGrab.grab(bbox=(left, top, right, bottom))
         screen_image = cv2.cvtColor(np.array(screen_image), cv2.COLOR_RGB2BGR)
