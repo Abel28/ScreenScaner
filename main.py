@@ -5,9 +5,6 @@ import tkinter as tk
 from tkinter import messagebox
 import sys
 
-if 'DISPLAY' not in os.environ:
-    os.environ['DISPLAY'] = ':0'
-
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(__file__))

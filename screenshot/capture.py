@@ -1,23 +1,37 @@
-import mss
+from mss import mss
 import numpy as np
 import cv2
-from screeninfo import get_monitors
 from PIL import ImageGrab
 
 class ScreenCapture:
     def __init__(self):
         self.image = None
+        
+    def get_monitors(self):
+        monitors_list = []
+        with mss() as sct:
+            monitors = sct.monitors
+            for monitor in monitors[1:]:
+                monitor_info = {
+                    "left": monitor["left"],
+                    "top": monitor["top"],
+                    "width": monitor["width"],
+                    "height": monitor["height"]
+                }
+                monitors_list.append(monitor_info)
+
+        return monitors_list
 
     def capture_monitor(self, monitor_index):
-        monitors = get_monitors()
+        monitors = self.get_monitors()
         
         if monitor_index < 0 or monitor_index >= len(monitors):
             raise ValueError("Índice de monitor fuera de rango.")
         
         monitor = monitors[monitor_index]
-        left, top = monitor.x, monitor.y
-        right = left + monitor.width
-        bottom = top + monitor.height
+        left, top = monitor["left"], monitor["top"]
+        right = left + monitor["width"]
+        bottom = top + monitor["height"]
 
         screen_image = ImageGrab.grab(bbox=(left, top, right, bottom))
         

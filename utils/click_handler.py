@@ -2,12 +2,13 @@ import pyautogui
 import cv2
 from PIL import ImageGrab
 import numpy as np
-from screeninfo import get_monitors
+from screenshot.capture import ScreenCapture
 
 class ClickHandler:
     def __init__(self, monitor_index, timeout=5):
         self.monitor_index = monitor_index
-        self.monitor = get_monitors()[monitor_index]
+        self.screen_capture = ScreenCapture
+        self.monitor = self.screen_capture.get_monitors()[monitor_index]
         self.timeout = timeout
 
     def click_on_match(self, region_image, offset_x=0, offset_y=0):

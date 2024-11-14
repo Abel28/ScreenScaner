@@ -13,7 +13,6 @@ import io
 from utils.image_matcher import ImageMatcher
 import os
 import pytesseract
-from screeninfo import get_monitors
 
 class ScreenshootView:
     def __init__(self, root: tk.Tk, notebook: Notebook):
@@ -39,7 +38,7 @@ class ScreenshootView:
         screen_options_frame.pack(fill="x", pady=10)
 
         tk.Label(screen_options_frame, text="Seleccione Monitor:").pack(side="left", padx=5)
-        monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(get_monitors()))])
+        monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))])
         monitor_menu.pack(side="left", padx=5)
 
         capture_button = ttk.Button(screen_options_frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)

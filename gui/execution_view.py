@@ -278,7 +278,7 @@ class ExecutionView:
         monitor_label = tk.Label(detect_window, text="Seleccione Monitor:")
         monitor_label.pack(pady=10)
 
-        monitors = get_monitors()
+        monitors = self.screen_capture.get_monitors()
         monitor_options = [f"Monitor {i + 1}" for i in range(len(monitors))]
         selected_monitor = tk.StringVar(value=monitor_options[0] if monitor_options else "Monitor 1")
 
