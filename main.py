@@ -13,7 +13,7 @@ def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
     return os.path.join(base_path, relative_path)
 
-tesseract_path = resource_path("tesseract/tesseract")
+tesseract_path = resource_path("tesseract/tesseract.exe")
 tessdata_path = resource_path("tesseract/tessdata")
 
 if os.path.exists(tesseract_path):
