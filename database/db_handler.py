@@ -1,9 +1,11 @@
 import sqlite3
+import cv2
 
 class DBHandler:
     def __init__(self, db_name="regions.db"):
         self.conn = sqlite3.connect(db_name)
         self.create_tables()
+        self.update_database_structure()
 
     def create_tables(self):
         with self.conn:
@@ -11,15 +13,15 @@ class DBHandler:
                 CREATE TABLE IF NOT EXISTS regions (
                     id INTEGER PRIMARY KEY,
                     filename TEXT NOT NULL,
-                    x1 INTEGER NOT NULL,
-                    y1 INTEGER NOT NULL,
-                    x2 INTEGER NOT NULL,
-                    y2 INTEGER NOT NULL,
+                    x1 INTEGER,
+                    y1 INTEGER,
+                    x2 INTEGER,
+                    y2 INTEGER,
                     action TEXT DEFAULT 'none',
                     image BLOB,
                     threshold REAL DEFAULT 0.8,
-                    click_x INTEGER DEFAULT 0,
-                    click_y INTEGER DEFAULT 0
+                    click_x INTEGER,
+                    click_y INTEGER
                 )
             """)
 
@@ -49,6 +51,45 @@ class DBHandler:
         if 'image_recognition_id' not in columns:
             with self.conn:
                 self.conn.execute("ALTER TABLE regions ADD COLUMN image_recognition_id INTEGER REFERENCES image_recognitions(id)")
+                
+        self.conn.commit()
+        
+    def update_database_structure(self):
+        cursor = self.conn.cursor()
+        
+        cursor.execute("PRAGMA table_info(regions)")
+        columns = cursor.fetchall()
+        column_info = {column[1]: column[3] for column in columns}
+        
+        if column_info.get("x1") == 0:
+            return
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS regions_temp (
+                id INTEGER PRIMARY KEY,
+                filename TEXT NOT NULL,
+                x1 INTEGER,
+                y1 INTEGER,
+                x2 INTEGER,
+                y2 INTEGER,
+                action TEXT DEFAULT 'none',
+                image BLOB,
+                threshold REAL DEFAULT 0.8,
+                click_x INTEGER,
+                click_y INTEGER
+            )
+        """)
+
+        cursor.execute("""
+            INSERT INTO regions_temp (id, filename, x1, y1, x2, y2, action, image, threshold, click_x, click_y)
+            SELECT id, filename, x1, y1, x2, y2, action, image, threshold, click_x, click_y FROM regions
+        """)
+
+        cursor.execute("DROP TABLE regions")
+
+        cursor.execute("ALTER TABLE regions_temp RENAME TO regions")
+
+        self.conn.commit()
 
     def get_all_regions(self):
         with self.conn:
@@ -152,3 +193,20 @@ class DBHandler:
                 INSERT INTO regions (filename, x1, y1, x2, y2, image, threshold, click_x, click_y)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (filename, x1, y1, x2, y2, image_data, threshold, click_offset[0], click_offset[1]))
+            
+    def insert_region_from_import(self, filename, image, x1=None, y1=None, x2=None, y2=None, action=None, threshold=0.8, click_x=None, click_y=None):
+        _, buffer = cv2.imencode('.png', image)
+        image_data = buffer.tobytes()
+
+        self.conn.execute("""
+            INSERT INTO regions (filename, x1, y1, x2, y2, action, image, threshold, click_x, click_y)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (filename, x1, y1, x2, y2, action, image_data, threshold, click_x, click_y))
+        self.conn.commit()
+        
+    def check_region_exists(self, filename):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT 1 FROM regions WHERE filename = ?", (filename,))
+        exists = cursor.fetchone() is not None
+        cursor.close()
+        return exists

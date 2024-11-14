@@ -3,13 +3,16 @@ from tkinter.ttk import Notebook
 import cv2
 import numpy as np
 from PIL import Image, ImageTk
-from tkinter import ttk
 from database.db_handler import DBHandler
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from utils.click_handler import ClickHandler
 from utils.image_matcher import ImageMatcher
 import time
 import os
+from .screenshot_view import ScreenCapture
+from screeninfo import get_monitors
+
+from tkinter import ttk, Menu
 
 class ExecutionView:
     def __init__(self, root: tk.Tk, notebook: Notebook):
@@ -18,59 +21,121 @@ class ExecutionView:
         notebook.add(self.frame, text="Ejecución")
 
         self.selected_monitor = tk.StringVar(value="1")
+        self.screen_capture = ScreenCapture()
 
         self.db = DBHandler()
         self.actions_queue = []
+        
+        self.update_id = None
 
         self.setup_execution_tab()
 
     def setup_execution_tab(self):
-
-        tk.Label(self.frame, text="Buscar").pack()
-        self.search_var = tk.StringVar()
-        search_entry = tk.Entry(self.frame, textvariable=self.search_var)
-        search_entry.pack(pady=5, fill="x")
+        top_frame = tk.Frame(self.frame, pady=10)
+        top_frame.pack(fill="x")
         
-        search_entry.bind("<KeyRelease>", self.update_execution_tab)
-        
-        self.actions_frame = tk.Frame(self.frame)
+        if not hasattr(self, 'actions_frame'):
+            self.actions_frame = tk.Frame(self.frame)
         self.actions_frame.pack(fill="both", expand=True)
 
-        execute_button = ttk.Button(self.frame, text="Ejecutar Acciones en Cadena", command=self.execute_actions)
-        execute_button.pack(pady=5)
+        import_button = tk.Button(top_frame, text="Importar Imagen", command=self.import_image)
+        import_button.pack(side="left", padx=10)
 
-        delete_button = ttk.Button(self.frame, text="Eliminar Acción Seleccionada", command=self.delete_action)
-        delete_button.pack(pady=5)
+        tk.Label(top_frame, text="Buscar:").pack(side="left", padx=(10, 5))
+        self.search_var = tk.StringVar()
+        search_entry = tk.Entry(top_frame, textvariable=self.search_var)
+        search_entry.pack(side="left", fill="x", expand=True, padx=(5, 10))
+        search_entry.bind("<KeyRelease>", self.update_execution_tab)
 
-        export_button = tk.Button(self.frame, text="Exportar Imágenes", command=self.export_images)
-        export_button.pack(pady=10)
+        actions_frame = tk.Frame(self.frame, pady=10)
+        actions_frame.pack(fill="x")
 
-        listbox_frame = tk.Frame(self.frame)
+        execute_button = ttk.Button(actions_frame, text="Ejecutar Acciones en Cadena", command=self.execute_actions)
+        execute_button.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+
+        delete_button = ttk.Button(actions_frame, text="Eliminar Acción Seleccionada", command=self.delete_action)
+        delete_button.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+
+        export_button = ttk.Button(actions_frame, text="Exportar Imágenes", command=self.export_images)
+        export_button.grid(row=0, column=2, padx=10, pady=5, sticky="ew")
+
+        actions_frame.grid_columnconfigure(0, weight=1)
+        actions_frame.grid_columnconfigure(1, weight=1)
+        actions_frame.grid_columnconfigure(2, weight=1)
+
+        listbox_frame = tk.Frame(self.frame, pady=10)
         listbox_frame.pack(fill="both", expand=True)
 
         self.actions_listbox = tk.Listbox(listbox_frame, selectmode=tk.SINGLE)
-        self.actions_listbox.pack(side="left", fill="both", expand=True)
+        self.actions_listbox.pack(side="left", fill="both", expand=True, padx=(10, 0), pady=5)
 
         scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.actions_listbox.yview)
-        scrollbar.pack(side="right", fill="y")
+        scrollbar.pack(side="right", fill="y", padx=(0, 10), pady=5)
 
         self.actions_listbox.configure(yscrollcommand=scrollbar.set)
+        self.update_execution_tab()
+        
+    def import_image(self):
+        file_path = filedialog.askopenfilename(
+            title="Seleccionar Imagen",
+            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                image = cv2.imread(file_path)
+                if image is None:
+                    messagebox.showerror("Error", "No se pudo cargar la imagen seleccionada.")
+                    return
+                
+                base_filename = os.path.basename(file_path)
+                filename = os.path.splitext(base_filename)[0]
+                ext = os.path.splitext(base_filename)[1]
+                
+                filename = self.get_unique_filename(filename, ext)
+                
+                self.db.insert_region_from_import(filename=filename, image=image)
+                
+                self.update_execution_tab()
+                
+                messagebox.showinfo("Importación exitosa", f"La imagen '{filename}{ext}' ha sido importada exitosamente y guardada en la base de datos.")
+            
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo importar la imagen: {e}")
+                
+    def get_unique_filename(self, filename, ext):
+        """Devuelve un nombre de archivo único agregando un sufijo si ya existe."""
+        original_filename = filename
+        suffix = 1
 
-        self.load_regions_for_execution()
+        while self.db.check_region_exists(f"{filename}{ext}"):
+            filename = f"{original_filename}_{suffix}"
+            suffix += 1
+        
+        return f"{filename}{ext}"
+                
 
     def load_regions_for_execution(self):
-        for region in self.db.get_all_regions():
-            region_frame = tk.Frame(self.actions_frame)
-            region_frame.pack(pady=5, fill="x")
+        for widget in self.actions_frame.winfo_children():
+            widget.destroy()
 
-            label = tk.Label(region_frame, text=region[1])
-            label.pack()
+        regions_container = tk.Frame(self.actions_frame)
+        regions_container.pack(fill="both", expand=True)
+
+        for region in self.db.get_all_regions():
+            region_frame = tk.Frame(regions_container, pady=5, padx=10, relief="solid", borderwidth=1)
+            region_frame.pack(fill="x", pady=5)
+
+            label = tk.Label(region_frame, text=region[1], anchor="w")
+            label.pack(side="left", padx=(10, 5))
 
             click_button = ttk.Button(region_frame, text="Click", command=lambda fn=region[1]: self.add_action("Click", fn))
             click_button.pack(side="left", padx=5)
 
             click_and_fill_button = ttk.Button(region_frame, text="Click y Escribir", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
             click_and_fill_button.pack(side="left", padx=5)
+
+        self.actions_frame.update_idletasks()
 
     def update_execution_tab(self, event=None):
         for widget in self.actions_frame.winfo_children():
@@ -81,9 +146,9 @@ class ExecutionView:
         container = tk.Frame(self.actions_frame)
         container.pack(fill="both", expand=True)
 
-        canvas = tk.Canvas(container)
+        canvas = tk.Canvas(container, bg="#f4f4f4")
         scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas)
+        scrollable_frame = tk.Frame(canvas, bg="#f4f4f4")
 
         scrollable_frame.bind(
             "<Configure>",
@@ -93,29 +158,41 @@ class ExecutionView:
         )
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        table_frame = tk.Frame(scrollable_frame)
-        table_frame.pack(fill="both", expand=True)
+        container.grid_columnconfigure(0, weight=1)
+        scrollable_frame.grid_columnconfigure(0, weight=1)
 
-        tk.Label(table_frame, text="Imagen", width=20, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=0, padx=5, pady=5)
-        tk.Label(table_frame, text="Nombre", width=10, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=1, padx=5, pady=5)
-        tk.Label(table_frame, text="Threshold", width=10, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=2, padx=5, pady=5)
-        tk.Label(table_frame, text="Offset (X, Y)", width=15, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=3, padx=5, pady=5)
-        tk.Label(table_frame, text="Opciones", width=30, anchor="w", borderwidth=1, relief="solid").grid(row=0, column=4, padx=5, pady=5)
+        headers = ["Imagen", "Nombre", "Threshold", "Offset (X, Y)", "Opciones"]
+        header_frame = tk.Frame(scrollable_frame, bg="#d9d9d9", relief="raised", bd=1)
+        header_frame.pack(fill="x", pady=(0, 5))
+
+        for idx, header in enumerate(headers):
+            tk.Label(header_frame, text=header, anchor="center",
+                    bg="#d9d9d9", font=("Arial", 10, "bold")).grid(row=0, column=idx, padx=5, pady=5, sticky="nsew")
+
+        for idx in range(len(headers)):
+            header_frame.grid_columnconfigure(idx, weight=1)
+
+        self.options_menu = None
 
         self.execution_image_references = []
-
         row_index = 1
         for region in self.db.get_all_regions():
             region_name = region[1].lower()
             if search_text in region_name:
                 image_data = region[7]
                 offset_x, offset_y = region[9], region[10]
+
+                row_frame = tk.Frame(scrollable_frame, bg="white", relief="groove", bd=1)
+                row_frame.pack(fill="x", expand=True, pady=2)
+
+                for idx in range(len(headers)):
+                    row_frame.grid_columnconfigure(idx, weight=1)
+
                 if image_data:
                     image_array = np.frombuffer(image_data, np.uint8)
                     region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
@@ -124,55 +201,141 @@ class ExecutionView:
                         cv2.circle(region_image, (offset_x, offset_y), radius=5, color=(0, 0, 255), thickness=-1)
 
                     region_image_rgb = cv2.cvtColor(region_image, cv2.COLOR_BGR2RGB)
-                    pil_img = Image.fromarray(region_image_rgb)
+                    max_size = 100
+                    target_size = 60 
+                    original_width, original_height = region_image_rgb.shape[1], region_image_rgb.shape[0]
+                    aspect_ratio = original_width / original_height
+
+                    if original_width > original_height:
+                        new_width = max_size
+                        new_height = int(max_size / aspect_ratio)
+                    else:
+                        new_height = max_size
+                        new_width = int(max_size * aspect_ratio)
+
+                    pil_img = Image.fromarray(region_image_rgb).resize((new_width, new_height), Image.LANCZOS)
                     img = ImageTk.PhotoImage(pil_img)
 
-                    image_frame = tk.Frame(table_frame, borderwidth=1, relief="solid")
-                    image_frame.grid(row=row_index, column=0, padx=5, pady=5)
-
-                    image_canvas = tk.Canvas(image_frame, width=100, height=100)
-                    image_canvas.pack(side="left", fill="both", expand=True)
-
-                    scroll_x = tk.Scrollbar(image_frame, orient="horizontal", command=image_canvas.xview)
-                    scroll_x.pack(side="bottom", fill="x")
-                    scroll_y = tk.Scrollbar(image_frame, orient="vertical", command=image_canvas.yview)
-                    scroll_y.pack(side="right", fill="y")
-
-                    image_canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
-
-                    image_canvas.create_image(0, 0, anchor="nw", image=img)
-                    image_canvas.config(scrollregion=image_canvas.bbox("all"))
-
+                    image_label = tk.Label(row_frame, image=img, bg="white")
+                    image_label.grid(row=row_index, column=0, padx=5, pady=5, sticky="nsew")
                     self.execution_image_references.append(img)
 
-                filename_label = tk.Label(table_frame, text=str(region[1]), anchor="w", borderwidth=1, relief="solid")
-                filename_label.grid(row=row_index, column=1, padx=5, pady=5)
+                filename_label = tk.Label(row_frame, text=str(region[1]), bg="white", anchor="w", font=("Arial", 9))
+                filename_label.grid(row=row_index, column=1, padx=5, pady=5, sticky="nsew")
 
-                threshold_label = tk.Label(table_frame, text=str(region[8]), anchor="w", borderwidth=1, relief="solid")
-                threshold_label.grid(row=row_index, column=2, padx=5, pady=5)
+                threshold_label = tk.Label(row_frame, text=str(region[8]), bg="white", anchor="w", font=("Arial", 9))
+                threshold_label.grid(row=row_index, column=2, padx=5, pady=5, sticky="nsew")
 
-                offset_label = tk.Label(table_frame, text=f"({offset_x}, {offset_y})", anchor="w", borderwidth=1, relief="solid")
-                offset_label.grid(row=row_index, column=3, padx=5, pady=5)
+                offset_label = tk.Label(row_frame, text=f"({offset_x}, {offset_y})", bg="white", anchor="w", font=("Arial", 9))
+                offset_label.grid(row=row_index, column=3, padx=5, pady=5, sticky="nsew")
 
-                options_frame = tk.Frame(table_frame, borderwidth=1, relief="solid")
-                options_frame.grid(row=row_index, column=4, padx=5, pady=5)
+                options_button = ttk.Button(row_frame, text="Opciones")
+                options_button.grid(row=row_index, column=4, padx=5, pady=5, sticky="nsew")
 
-                modify_offset_button = ttk.Button(options_frame, text="Modificar Offset", command=lambda fn=region[1]: self.modify_offset(fn))
-                modify_offset_button.pack(side="left", padx=2)
+                options_menu = Menu(self.root, tearoff=0)
+                options_menu.add_command(label="Modificar Offset", command=lambda fn=region[1]: self.modify_offset(fn))
+                options_menu.add_command(label="Detectar", command=lambda fn=region[1]: self.detect_all_matches_with_threshold(fn))
+                options_menu.add_command(label="Click", command=lambda fn=region[1]: self.add_action("Click", fn))
+                options_menu.add_command(label="Click y Escribir", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
+                options_menu.add_command(label="Wait Image", command=lambda fn=region[1]: self.add_action("Wait Image", fn))
+                options_menu.add_command(label="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
 
-                click_button = ttk.Button(options_frame, text="Click", command=lambda fn=region[1]: self.add_action("Click", fn))
-                click_button.pack(side="left", padx=2)
+                def show_options_menu(event, menu=options_menu):
+                    if self.options_menu:
+                        self.options_menu.unpost()
+                    
+                    menu.post(event.x_root, event.y_root)
+                    self.options_menu = menu
 
-                click_and_fill_button = ttk.Button(options_frame, text="Click y Escribir", command=lambda fn=region[1]: self.add_click_and_fill_action(fn))
-                click_and_fill_button.pack(side="left", padx=2)
+                    self.root.bind("<Button-1>", close_options_menu)
 
-                wait_image_button = ttk.Button(options_frame, text="Wait Image", command=lambda fn=region[1]: self.add_action("Wait Image", fn))
-                wait_image_button.pack(side="left", padx=2)
+                def close_options_menu(event=None):
+                    if self.options_menu:
+                        self.options_menu.unpost()
+                        self.options_menu = None
+                    self.root.unbind("<Button-1>")
 
-                click_download = ttk.Button(options_frame, text="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
-                click_download.pack(side="left", padx=2)
+                options_button.bind("<Button-1>", show_options_menu)
 
                 row_index += 1
+                
+                
+    
+    def detect_all_matches_with_threshold(self, filename):
+        image_data, saved_threshold = self.db.get_image_data_and_threshold(filename)
+        if image_data:
+            image_array = np.frombuffer(image_data, np.uint8)
+            region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+        if region_image is None:
+            messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+            return
+
+        detect_window = tk.Toplevel(self.root)
+        detect_window.title("Detectar Coincidencias")
+        detect_window.geometry("800x600")
+
+        monitor_label = tk.Label(detect_window, text="Seleccione Monitor:")
+        monitor_label.pack(pady=10)
+
+        monitors = get_monitors()
+        monitor_options = [f"Monitor {i + 1}" for i in range(len(monitors))]
+        selected_monitor = tk.StringVar(value=monitor_options[0] if monitor_options else "Monitor 1")
+
+        monitor_menu = ttk.OptionMenu(detect_window, selected_monitor, "1", *[str(i + 1) for i in range(len(monitor_options))])
+        monitor_menu.pack(pady=5)
+
+        container = tk.Frame(detect_window)
+        container.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(container, width=750, height=400)
+        canvas.pack(side="left", fill="both", expand=True)
+
+        scroll_x = tk.Scrollbar(container, orient="horizontal", command=canvas.xview)
+        scroll_x.pack(side="bottom", fill="x")
+        scroll_y = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scroll_y.pack(side="right", fill="y")
+        canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
+
+        match_count_label = tk.Label(detect_window, text="Coincidencias encontradas: 0")
+        match_count_label.pack(pady=10)
+
+        def schedule_update_matches(threshold):
+            if self.update_id is not None:
+                detect_window.after_cancel(self.update_id)
+            self.update_id = detect_window.after(200, lambda: update_matches(threshold))
+
+        def update_matches(threshold):
+            try:
+                monitor_index = int(selected_monitor.get().split()[-1]) - 1
+                screenshot, monitor_info = self.screen_capture.capture_monitor(monitor_index)
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
+                return
+
+            match_image = screenshot.copy()
+            matcher = ImageMatcher(monitor_index)
+            all_matches = matcher.find_all_matches(region_image, match_image, float(threshold))
+
+            for (top_left, bottom_right) in all_matches:
+                cv2.rectangle(match_image, top_left, bottom_right, (0, 255, 0), 3)
+
+            match_image_rgb = cv2.cvtColor(match_image, cv2.COLOR_BGR2RGB)
+            pil_match_image = Image.fromarray(match_image_rgb)
+            tk_match_image = ImageTk.PhotoImage(pil_match_image)
+
+            canvas.create_image(0, 0, anchor="nw", image=tk_match_image)
+            canvas.image = tk_match_image
+            canvas.config(scrollregion=canvas.bbox("all"))
+
+            match_count_label.config(text=f"Coincidencias encontradas: {len(all_matches)}")
+
+        threshold_slider = tk.Scale(detect_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal",
+                                    label="Threshold de Coincidencia", command=lambda value: schedule_update_matches(float(value)))
+        threshold_slider.set(saved_threshold if saved_threshold is not None else 0.8)
+        threshold_slider.pack(side="bottom", fill="x")
+
+        update_matches(threshold_slider.get())
 
 
     def add_action(self, action_type, filename):
@@ -370,3 +533,19 @@ class ExecutionView:
                 messagebox.showwarning("Exportación Cancelada", "No se ingresó un nombre de subcarpeta. La exportación fue cancelada.")
         else:
             messagebox.showwarning("Exportación Cancelada", "No se seleccionó ningún directorio. La exportación fue cancelada.")
+            
+            
+    def delete_region(self, filename):
+        confirm = messagebox.askyesno("Confirmar Eliminación", f"¿Está seguro de que desea eliminar la región {filename}?")
+        
+        if confirm:
+            try:
+                if os.path.exists(filename):
+                    os.remove(filename)
+
+                self.db.delete_region(filename)
+
+                self.update_execution_tab()
+                messagebox.showinfo("Eliminado", f"La región {filename} se ha eliminado correctamente.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo eliminar la región {filename}: {e}")

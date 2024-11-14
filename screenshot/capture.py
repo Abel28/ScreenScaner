@@ -6,12 +6,7 @@ from PIL import ImageGrab
 
 class ScreenCapture:
     def __init__(self):
-        self.sct = mss.mss()
         self.image = None
-
-    def get_monitors(self):
-        monitors = self.sct.monitors[1:]
-        return monitors
 
     def capture_monitor(self, monitor_index):
         monitors = get_monitors()

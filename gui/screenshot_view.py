@@ -13,7 +13,7 @@ import io
 from utils.image_matcher import ImageMatcher
 import os
 import pytesseract
-
+from screeninfo import get_monitors
 
 class ScreenshootView:
     def __init__(self, root: tk.Tk, notebook: Notebook):
@@ -35,57 +35,58 @@ class ScreenshootView:
         self.setup_tab_ui()
 
     def setup_tab_ui(self):
-
         screen_options_frame = tk.Frame(self.frame)
-        screen_options_frame.pack(pady=20)
+        screen_options_frame.pack(fill="x", pady=10)
 
         tk.Label(screen_options_frame, text="Seleccione Monitor:").pack(side="left", padx=5)
-
-        monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))])
+        monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(get_monitors()))])
         monitor_menu.pack(side="left", padx=5)
-
-
-        display_frame = tk.Frame(self.frame)
-        display_frame.pack(fill="both", expand=True)
-
-        self.canvas_frame = tk.Frame(display_frame)
-        self.canvas_frame.pack(side="left", fill="both", expand=True)
 
         capture_button = ttk.Button(screen_options_frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)
         capture_button.pack(side="left", padx=5)
-        
+
         fullscreen_button = ttk.Button(screen_options_frame, text="Abrir en Pantalla Completa", command=self.show_fullscreen_screenshot)
-        fullscreen_button.pack(pady=5)
+        fullscreen_button.pack(side="left", padx=5)
+
+        display_frame = tk.Frame(self.frame)
+        display_frame.pack(fill="both", expand=True)
+        
+        if not hasattr(self, 'regions_frame'):
+            self.regions_frame = tk.Frame(self.frame)
+            self.regions_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.canvas_frame = tk.Frame(display_frame, borderwidth=1, relief="sunken")
+        self.canvas_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
         self.canvas = tk.Canvas(self.canvas_frame, width=500, height=500)
         self.scroll_x = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
         self.scroll_y = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(xscrollcommand=self.scroll_x.set, yscrollcommand=self.scroll_y.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
         self.scroll_x.pack(side="bottom", fill="x")
         self.scroll_y.pack(side="right", fill="y")
-        self.canvas.pack(side="left", fill="both", expand=True)
 
         self.frame.update_idletasks()
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
 
-        self.regions_frame = tk.Frame(self.frame)
-        self.regions_frame.pack(fill="both", expand=True)
+        right_panel = tk.Frame(display_frame, width=250)
+        right_panel.pack(side="right", fill="y", padx=10, pady=10)
 
-        save_button = ttk.Button(self.frame, text="Guardar Imagen", command=self.save_region)
-        save_button.pack(pady=5)
-
-        view_button = ttk.Button(self.frame, text="Ver Regiones", command=self.show_saved_regions)
-        view_button.pack(pady=5)
-
-        self.text_display = tk.Text(display_frame, wrap="word", width=40, height=20)
-        self.text_display.pack(side="right", fill="y", padx=10)
+        self.text_display = tk.Text(right_panel, wrap="word", width=40, height=20)
+        self.text_display.pack(fill="both", expand=True)
         self.text_display.insert("1.0", "Seleccione un área para reconocer texto...")
         self.text_display.config(state="disabled")
 
-        recognize_text_button = ttk.Button(self.frame, text="Reconocer Texto en Área Seleccionada", command=self.recognize_text_in_selected_area)
-        recognize_text_button.pack(pady=5)
+        save_button = ttk.Button(right_panel, text="Guardar Imagen", command=self.save_region)
+        save_button.pack(fill="x", pady=(10, 5))
 
-        self.canvas.bind("<Enter>", self._bind_mouse_scroll) 
+        view_button = ttk.Button(right_panel, text="Ver Regiones", command=self.show_saved_regions)
+        view_button.pack(fill="x", pady=5)
+
+        recognize_text_button = ttk.Button(right_panel, text="Reconocer Texto en Área Seleccionada", command=self.recognize_text_in_selected_area)
+        recognize_text_button.pack(fill="x", pady=5)
+
+        self.canvas.bind("<Enter>", self._bind_mouse_scroll)
         self.canvas.bind("<Leave>", self._unbind_mouse_scroll)
         
     def show_fullscreen_screenshot(self):
@@ -159,8 +160,8 @@ class ScreenshootView:
         self.coord_label.place(x=10, y=10)
 
         def update_coordinates(event):
-            x = event.x
-            y = event.y
+            x = self.canvas.canvasx(event.x)
+            y = self.canvas.canvasy(event.y)
             self.coord_label.config(text=f"X: {x}, Y: {y}")
 
         self.canvas.bind("<Motion>", update_coordinates)
@@ -172,12 +173,16 @@ class ScreenshootView:
             filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
 
             if filename:
+                filename = f"{filename}.png" if not filename.endswith(".png") else filename
+                
+                if self.db.check_region_exists(filename):
+                    messagebox.showwarning("Advertencia", "Ya existe una imagen con este nombre. Por favor, elija otro nombre.")
+                    return
+
                 threshold, region_image = self.get_threshold_and_matches()
                 if threshold is None or region_image is None:
                     return
 
-                filename = f"{filename}.png" if not filename.endswith(".png") else filename
-                
                 monitor_index = int(self.selected_monitor.get()) - 1
                 self.select_click_offset(filename, x1, y1, x2, y2, region_image, threshold)
             else:
@@ -188,6 +193,19 @@ class ScreenshootView:
     def show_saved_regions(self):
         for widget in self.regions_frame.winfo_children():
             widget.destroy()
+
+        def expand_window(event):
+            self.root.geometry("800x800")
+
+        search_frame = tk.Frame(self.regions_frame)
+        search_frame.pack(fill="x", padx=10, pady=5)
+
+        tk.Label(search_frame, text="Buscar:").pack(side="left", padx=(5, 2))
+        self.search_var = tk.StringVar()
+        search_entry = tk.Entry(search_frame, textvariable=self.search_var)
+        search_entry.pack(side="left", fill="x", expand=True, padx=(2, 5))
+        search_entry.bind("<KeyRelease>", lambda event: self.update_filtered_regions())
+        search_entry.bind("<FocusIn>", expand_window)
 
         canvas = tk.Canvas(self.regions_frame)
         scroll_y = tk.Scrollbar(self.regions_frame, orient="vertical", command=canvas.yview)
@@ -207,42 +225,66 @@ class ScreenshootView:
         canvas.pack(side="left", fill="both", expand=True)
         scroll_y.pack(side="right", fill="y")
 
+        self.scrollable_frame = scrollable_frame
+        self.image_references = []
+
+        self.update_filtered_regions()
+        
+    def update_filtered_regions(self):
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        search_text = self.search_var.get().lower()
         self.image_references = []
 
         for region in self.db.get_all_regions():
-            region_frame = tk.Frame(scrollable_frame)
-            region_frame.pack(pady=5, fill="x")
+            region_name = region[1].lower()
+            if search_text in region_name:
+                region_frame = tk.Frame(self.scrollable_frame, bg="white", relief="groove", bd=2)
+                region_frame.pack(pady=10, padx=10, fill="x")
 
-            label = tk.Label(region_frame, text=region[1])
-            label.pack()
+                label = tk.Label(region_frame, text=region[1], font=("Arial", 10, "bold"), bg="white")
+                label.pack(anchor="w", padx=10, pady=5)
 
-            image_data = region[7]
+                image_data = region[7]
 
-            if image_data:
-                pil_img = Image.open(io.BytesIO(image_data))
-                img = ImageTk.PhotoImage(pil_img)
-                image_label = tk.Label(region_frame, image=img)
-                image_label.pack()
+                if image_data:
+                    pil_img = Image.open(io.BytesIO(image_data))
+                    original_width, original_height = pil_img.size
+                    max_size = 100
+                    aspect_ratio = original_width / original_height
 
-                self.image_references.append(img)
+                    if original_width > original_height:
+                        new_width = max_size
+                        new_height = int(max_size / aspect_ratio)
+                    else:
+                        new_height = max_size
+                        new_width = int(max_size * aspect_ratio)
 
-            options_frame = tk.Frame(region_frame)
-            options_frame.pack()
+                    pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+                    img = ImageTk.PhotoImage(pil_img)
 
-            click_button = ttk.Button(options_frame, text="Click", command=lambda fn=region[1]: self.handle_click(fn))
-            click_button.pack(side="left", padx=5)
+                    image_label = tk.Label(region_frame, image=img, bg="white")
+                    image_label.pack(pady=5)
+                    self.image_references.append(img)
 
-            click_and_fill_button = ttk.Button(options_frame, text="Click y Escribir", command=lambda fn=region[1]: self.handle_click_and_type(fn))
-            click_and_fill_button.pack(side="left", padx=5)
+                options_frame = tk.Frame(region_frame, bg="white")
+                options_frame.pack(fill="x", pady=5)
 
-            click_download = ttk.Button(options_frame, text="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
-            click_download.pack(side="left", padx=5)
+                click_button = ttk.Button(options_frame, text="Click", command=lambda fn=region[1]: self.handle_click(fn))
+                click_button.pack(side="left", padx=5, pady=5)
 
-            click_delete = ttk.Button(options_frame, text="Eliminar", command=lambda fn=region[1]: self.delete_region(fn))
-            click_delete.pack(side="left", padx=5)
+                click_and_fill_button = ttk.Button(options_frame, text="Click y Escribir", command=lambda fn=region[1]: self.handle_click_and_type(fn))
+                click_and_fill_button.pack(side="left", padx=5, pady=5)
 
-            detect_button = ttk.Button(options_frame, text="Detectar", command=lambda fn=region[1]: self.detect_all_matches_with_threshold(fn))
-            detect_button.pack(side="left", padx=5)
+                click_download = ttk.Button(options_frame, text="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
+                click_download.pack(side="left", padx=5, pady=5)
+
+                click_delete = ttk.Button(options_frame, text="Eliminar", command=lambda fn=region[1]: self.delete_region(fn))
+                click_delete.pack(side="left", padx=5, pady=5)
+
+                detect_button = ttk.Button(options_frame, text="Detectar", command=lambda fn=region[1]: self.detect_all_matches_with_threshold(fn))
+                detect_button.pack(side="left", padx=5, pady=5)
 
     def get_threshold_and_matches(self):
         """Muestra una ventana con un slider para ajustar el threshold y visualizar coincidencias en la captura de pantalla completa."""
@@ -392,7 +434,7 @@ class ScreenshootView:
         if image_data:
             image_array = np.frombuffer(image_data, np.uint8)
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-        
+
         if region_image is None:
             messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
             return
@@ -424,6 +466,13 @@ class ScreenshootView:
         match_count_label = tk.Label(detect_window, text="Coincidencias encontradas: 0")
         match_count_label.pack()
 
+        def schedule_update_matches(threshold):
+            if self.update_id is not None:
+                detect_window.after_cancel(self.update_id)
+
+
+            self.update_id = detect_window.after(200, lambda: update_matches(threshold))
+
         def update_matches(threshold):
             match_image = screenshot.copy()
             matcher = ImageMatcher(monitor_index)
@@ -443,7 +492,7 @@ class ScreenshootView:
             match_count_label.config(text=f"Coincidencias encontradas: {len(all_matches)}")
 
         threshold_slider = tk.Scale(detect_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal",
-                                    label="Threshold de Coincidencia", command=update_matches)
+                                    label="Threshold de Coincidencia", command=lambda value: schedule_update_matches(float(value)))
         threshold_slider.set(saved_threshold if saved_threshold is not None else 0.8)
         threshold_slider.pack(side="bottom", fill="x")
 
@@ -458,9 +507,6 @@ class ScreenshootView:
         update_matches(threshold_slider.get())
 
     def select_click_offset(self, filename, x1, y1, x2, y2, region_image, threshold):
-        """
-        Muestra la región seleccionada y permite al usuario seleccionar el punto de clic.
-        """
         offset_window = tk.Toplevel(self.root)
         offset_window.title("Seleccionar Punto de Clic")
         offset_window.geometry("400x400")
@@ -491,10 +537,13 @@ class ScreenshootView:
                 _, buffer = cv2.imencode('.png', region_image)
                 image_data = buffer.tobytes()
 
-                self.db.insert_region(filename, x1, y1, x2, y2, image_data=image_data, threshold=threshold,
-                                    click_offset=(click_offset["x"], click_offset["y"]))
-                messagebox.showinfo("Guardado", f"Región y punto de clic guardados exitosamente en la base de datos como {filename}")
+                self.db.insert_region(
+                    filename, x1, y1, x2, y2, image_data=image_data, threshold=threshold,
+                    click_offset=(click_offset["x"], click_offset["y"])
+                )
+
                 offset_window.destroy()
+                offset_window.after(500, lambda: messagebox.showinfo("Guardado", f"Región y punto de clic guardados exitosamente en la base de datos como {filename}"))
             else:
                 messagebox.showwarning("Advertencia", "Por favor, seleccione un punto de clic antes de confirmar.")
 
@@ -511,7 +560,7 @@ class ScreenshootView:
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def recognize_text_in_selected_area(self):
-        if self.selected_regions:
+        if self.selected_region:
             x1, y1, x2, y2 = self.selected_regions[-1]
             selected_region = self.image[y1:y2, x1:x2]
 
