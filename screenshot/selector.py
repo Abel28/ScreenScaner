@@ -2,6 +2,7 @@ import cv2
 from PIL import Image, ImageTk
 from tkinter import Canvas
 import pytesseract
+import tkinter as tk
 
 class RegionSelector:
     def __init__(self, canvas, image, update_text_callback):
@@ -41,3 +42,23 @@ class RegionSelector:
             recognized_text = pytesseract.image_to_string(gray_region)
             
             self.update_text_callback(recognized_text)
+            
+    def recognize_text_in_selected_area(self):
+        if self.selected_regions:
+            x1, y1, x2, y2 = self.selected_regions[-1]
+            width, height = x2 - x1, y2 - y1
+            selected_region = self.image[y1:y2, x1:x2]
+
+            if selected_region.size == 0:
+                print("La región seleccionada está vacía.")
+                return "", (0, 0, 0, 0)
+
+            try:
+                gray_region = cv2.cvtColor(selected_region, cv2.COLOR_BGR2GRAY)
+                recognized_text = pytesseract.image_to_string(gray_region)
+                return recognized_text, (x1, y1, x2, y2)
+            except cv2.error as e:
+                print(f"Error al convertir a escala de grises: {e}")
+                return "", (0, 0, 0, 0)
+        else:
+            return "", (0, 0, 0, 0)
