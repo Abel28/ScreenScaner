@@ -14,6 +14,7 @@ from utils.image_matcher import ImageMatcher
 import os
 import pytesseract
 
+
 class ScreenshootView:
     def __init__(self, root: tk.Tk, notebook: Notebook):
         self.frame = tk.Frame(notebook)
@@ -37,37 +38,58 @@ class ScreenshootView:
         screen_options_frame = tk.Frame(self.frame)
         screen_options_frame.pack(fill="x", pady=10)
 
-        tk.Label(screen_options_frame, text="Seleccione Monitor:").pack(side="left", padx=5)
-        monitor_menu = ttk.OptionMenu(screen_options_frame, self.selected_monitor, "1", *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))])
+        tk.Label(screen_options_frame, text="Seleccione Monitor:").pack(
+            side="left", padx=5
+        )
+        monitor_menu = ttk.OptionMenu(
+            screen_options_frame,
+            self.selected_monitor,
+            "1",
+            *[str(i + 1) for i in range(len(self.screen_capture.get_monitors()))],
+        )
         monitor_menu.pack(side="left", padx=5)
 
-        capture_button = ttk.Button(screen_options_frame, text="Capturar y Mostrar Monitor", command=self.show_screenshot)
+        capture_button = ttk.Button(
+            screen_options_frame,
+            text="Capturar y Mostrar Monitor",
+            command=self.show_screenshot,
+        )
         capture_button.pack(side="left", padx=5)
 
-        fullscreen_button = ttk.Button(screen_options_frame, text="Abrir en Pantalla Completa", command=self.show_fullscreen_screenshot)
+        fullscreen_button = ttk.Button(
+            screen_options_frame,
+            text="Abrir en Pantalla Completa",
+            command=self.show_fullscreen_screenshot,
+        )
         fullscreen_button.pack(side="left", padx=5)
 
         display_frame = tk.Frame(self.frame)
         display_frame.pack(fill="both", expand=True)
-        
-        
-        if not hasattr(self, 'regions_frame'):
+
+        if not hasattr(self, "regions_frame"):
             self.regions_frame = tk.Frame(self.frame)
             self.regions_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         self.canvas_frame = tk.Frame(display_frame, borderwidth=1, relief="sunken")
         self.canvas_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-    
 
         self.canvas = tk.Canvas(self.canvas_frame, width=500, height=500)
-        self.scroll_x = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
-        self.scroll_y = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(xscrollcommand=self.scroll_x.set, yscrollcommand=self.scroll_y.set)
+        self.scroll_x = tk.Scrollbar(
+            self.canvas_frame, orient="horizontal", command=self.canvas.xview
+        )
+        self.scroll_y = tk.Scrollbar(
+            self.canvas_frame, orient="vertical", command=self.canvas.yview
+        )
+        self.canvas.configure(
+            xscrollcommand=self.scroll_x.set, yscrollcommand=self.scroll_y.set
+        )
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scroll_x.pack(side="bottom", fill="x")
         self.scroll_y.pack(side="right", fill="y")
-        
-        self.selector = RegionSelector(self.canvas, self.image, self.update_text_display)
+
+        self.selector = RegionSelector(
+            self.canvas, self.image, self.update_text_display
+        )
 
         self.frame.update_idletasks()
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
@@ -80,41 +102,64 @@ class ScreenshootView:
         self.text_display.insert("1.0", "Seleccione un área para reconocer texto...")
         self.text_display.config(state="disabled")
 
-        save_button = ttk.Button(self.right_panel, text="Guardar Imagen", command=self.save_region)
+        save_button = ttk.Button(
+            self.right_panel, text="Guardar Imagen", command=self.save_region
+        )
         save_button.pack(fill="x", pady=(10, 5))
 
-        view_button = ttk.Button(self.right_panel, text="Ver Regiones", command=self.show_saved_regions)
+        view_button = ttk.Button(
+            self.right_panel, text="Ver Regiones", command=self.show_saved_regions
+        )
         view_button.pack(fill="x", pady=5)
 
-        recognize_text_button = ttk.Button(self.right_panel, text="Reconocer Texto en Área Seleccionada", command=self.recognize_text_in_area)
+        recognize_text_button = ttk.Button(
+            self.right_panel,
+            text="Reconocer Texto en Área Seleccionada",
+            command=self.recognize_text_in_area,
+        )
         recognize_text_button.pack(fill="x", pady=5)
 
         self.canvas.bind("<Enter>", self._bind_mouse_scroll)
         self.canvas.bind("<Leave>", self._unbind_mouse_scroll)
-        
+
     def recognize_text_in_area(self):
         if self.selector and self.selector.selected_regions:
-            recognized_text, coordinates = self.selector.recognize_text_in_selected_area()
-            
+            recognized_text, coordinates = (
+                self.selector.recognize_text_in_selected_area()
+            )
+
             result_window = tk.Toplevel(self.root)
             result_window.title("Resultado de Reconocimiento de Texto")
             result_window.geometry("400x300")
 
             x1, y1, x2, y2 = coordinates
-            
+
             coords_text = f"({x1}, {y1}, {x2}, {y2})"
             pos_text = f"({x1}, {y1}, {x2-x1}, {y2-y1})"
-            
-            coords_label = tk.Label(result_window, text=f"Coordenadas: (x1={x1}, y1={y1}, x2={x2}, y2={y2})")
+
+            coords_label = tk.Label(
+                result_window, text=f"Coordenadas: (x1={x1}, y1={y1}, x2={x2}, y2={y2})"
+            )
             coords_label.pack(pady=10)
-            
-            coords_label = tk.Label(result_window, text=f"Posición: (x1={x1}, y1={y1}, width={x2-x1}, height={y2-y1})")
+
+            coords_label = tk.Label(
+                result_window,
+                text=f"Posición: (x1={x1}, y1={y1}, width={x2-x1}, height={y2-y1})",
+            )
             coords_label.pack(pady=10)
-            
-            copy_button = tk.Button(result_window, text="Copiar Coordenadas", command=lambda: self.copy_to_clipboard(coords_text))
+
+            copy_button = tk.Button(
+                result_window,
+                text="Copiar Coordenadas",
+                command=lambda: self.copy_to_clipboard(coords_text),
+            )
             copy_button.pack(pady=5)
-            
-            copy_button = tk.Button(result_window, text="Copiar Posición", command=lambda: self.copy_to_clipboard(pos_text))
+
+            copy_button = tk.Button(
+                result_window,
+                text="Copiar Posición",
+                command=lambda: self.copy_to_clipboard(pos_text),
+            )
             copy_button.pack(pady=5)
 
             text_label = tk.Label(result_window, text="Texto Reconocido:")
@@ -124,8 +169,11 @@ class ScreenshootView:
             text_display.insert("1.0", recognized_text)
             text_display.config(state="disabled")
         else:
-            messagebox.showwarning("Advertencia", "No hay ninguna región seleccionada para reconocer texto.")
-            
+            messagebox.showwarning(
+                "Advertencia",
+                "No hay ninguna región seleccionada para reconocer texto.",
+            )
+
     def show_fullscreen_screenshot(self):
         monitor_index = int(self.selected_monitor.get()) - 1
         if self.image is None:
@@ -145,13 +193,23 @@ class ScreenshootView:
         fullscreen_canvas.create_image(0, 0, anchor="nw", image=tk_image)
         fullscreen_canvas.image = tk_image
 
-        self.fullscreen_selector = RegionSelector(fullscreen_canvas, self.image, self.update_text_display)
+        self.fullscreen_selector = RegionSelector(
+            fullscreen_canvas, self.image, self.update_text_display
+        )
 
-        close_button = ttk.Button(self.fullscreen_window, text="Cerrar", command=self.fullscreen_window.destroy)
+        close_button = ttk.Button(
+            self.fullscreen_window,
+            text="Cerrar",
+            command=self.fullscreen_window.destroy,
+        )
         close_button.place(x=20, y=20)
         close_button.place_forget()
 
-        save_button = ttk.Button(self.fullscreen_window, text="Guardar Imagen", command=self.save_and_close_fullscreen)
+        save_button = ttk.Button(
+            self.fullscreen_window,
+            text="Guardar Imagen",
+            command=self.save_and_close_fullscreen,
+        )
         save_button.place(x=20, y=60)
         save_button.place_forget()
 
@@ -165,13 +223,12 @@ class ScreenshootView:
 
         self.fullscreen_window.bind("<Escape>", toggle_buttons)
         fullscreen_canvas.bind("<Button-3>", toggle_buttons)
-        
-        
+
     def save_and_close_fullscreen(self):
         if self.fullscreen_selector and self.fullscreen_selector.selected_regions:
             self.selector = self.fullscreen_selector
             self.fullscreen_window.destroy()
-            self.save_region()  
+            self.save_region()
 
     def show_screenshot(self):
         self.screen_capture = ScreenCapture()
@@ -187,10 +244,13 @@ class ScreenshootView:
                 self.canvas.image = tk_image
                 self.canvas.config(scrollregion=self.canvas.bbox("all"))
 
-                self.selector = RegionSelector(self.canvas, self.image, self.update_text_display)
-                
+                self.selector = RegionSelector(
+                    self.canvas, self.image, self.update_text_display
+                )
 
-                self.coord_label = tk.Label(self.canvas, text="", bg="black", fg="white", font=("Arial", 10))
+                self.coord_label = tk.Label(
+                    self.canvas, text="", bg="black", fg="white", font=("Arial", 10)
+                )
                 self.coord_label.place(x=10, y=10)
 
                 def update_coordinates(event):
@@ -199,23 +259,35 @@ class ScreenshootView:
                     self.coord_label.config(text=f"X: {x}, Y: {y}")
 
                 self.canvas.bind("<Motion>", update_coordinates)
-                
+
             else:
-                messagebox.showerror("Error", "No se pudo capturar la imagen del monitor seleccionado.")
+                messagebox.showerror(
+                    "Error", "No se pudo capturar la imagen del monitor seleccionado."
+                )
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
+            messagebox.showerror(
+                "Error", f"No se pudo capturar el monitor seleccionado: {e}"
+            )
 
     def save_region(self):
         if self.selector and self.selector.selected_regions:
             x1, y1, x2, y2 = self.selector.selected_regions[-1]
 
-            filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
+            filename = simpledialog.askstring(
+                "Guardar Región",
+                "Ingrese el nombre del archivo para guardar la región:",
+            )
 
             if filename:
-                filename = f"{filename}.png" if not filename.endswith(".png") else filename
-                
+                filename = (
+                    f"{filename}.png" if not filename.endswith(".png") else filename
+                )
+
                 if self.db.check_region_exists(filename):
-                    messagebox.showwarning("Advertencia", "Ya existe una imagen con este nombre. Por favor, elija otro nombre.")
+                    messagebox.showwarning(
+                        "Advertencia",
+                        "Ya existe una imagen con este nombre. Por favor, elija otro nombre.",
+                    )
                     return
 
                 threshold, region_image = self.get_threshold_and_matches()
@@ -223,11 +295,18 @@ class ScreenshootView:
                     return
 
                 monitor_index = int(self.selected_monitor.get()) - 1
-                self.select_click_offset(filename, x1, y1, x2, y2, region_image, threshold)
+                self.select_click_offset(
+                    filename, x1, y1, x2, y2, region_image, threshold
+                )
             else:
-                messagebox.showwarning("Advertencia", "No se ingresó un nombre de archivo. Operación de guardado cancelada.")
+                messagebox.showwarning(
+                    "Advertencia",
+                    "No se ingresó un nombre de archivo. Operación de guardado cancelada.",
+                )
         else:
-            messagebox.showerror("Error", "No hay una región seleccionada para guardar.")
+            messagebox.showerror(
+                "Error", "No hay una región seleccionada para guardar."
+            )
 
     def show_saved_regions(self):
         for widget in self.regions_frame.winfo_children():
@@ -247,12 +326,13 @@ class ScreenshootView:
         search_entry.bind("<FocusIn>", expand_window)
 
         canvas = tk.Canvas(self.regions_frame)
-        scroll_y = tk.Scrollbar(self.regions_frame, orient="vertical", command=canvas.yview)
+        scroll_y = tk.Scrollbar(
+            self.regions_frame, orient="vertical", command=canvas.yview
+        )
         scrollable_frame = tk.Frame(canvas)
 
         scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -268,7 +348,7 @@ class ScreenshootView:
         self.image_references = []
 
         self.update_filtered_regions()
-        
+
     def update_filtered_regions(self):
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
@@ -279,10 +359,14 @@ class ScreenshootView:
         for region in self.db.get_all_regions():
             region_name = region[1].lower()
             if search_text in region_name:
-                region_frame = tk.Frame(self.scrollable_frame, bg="white", relief="groove", bd=2)
+                region_frame = tk.Frame(
+                    self.scrollable_frame, bg="white", relief="groove", bd=2
+                )
                 region_frame.pack(pady=10, padx=10, fill="x")
 
-                label = tk.Label(region_frame, text=region[1], font=("Arial", 10, "bold"), bg="white")
+                label = tk.Label(
+                    region_frame, text=region[1], font=("Arial", 10, "bold"), bg="white"
+                )
                 label.pack(anchor="w", padx=10, pady=5)
 
                 image_data = region[7]
@@ -310,19 +394,41 @@ class ScreenshootView:
                 options_frame = tk.Frame(region_frame, bg="white")
                 options_frame.pack(fill="x", pady=5)
 
-                click_button = ttk.Button(options_frame, text="Click", command=lambda fn=region[1]: self.handle_click(fn))
+                click_button = ttk.Button(
+                    options_frame,
+                    text="Click",
+                    command=lambda fn=region[1]: self.handle_click(fn),
+                )
                 click_button.pack(side="left", padx=5, pady=5)
 
-                click_and_fill_button = ttk.Button(options_frame, text="Click y Escribir", command=lambda fn=region[1]: self.handle_click_and_type(fn))
+                click_and_fill_button = ttk.Button(
+                    options_frame,
+                    text="Click y Escribir",
+                    command=lambda fn=region[1]: self.handle_click_and_type(fn),
+                )
                 click_and_fill_button.pack(side="left", padx=5, pady=5)
 
-                click_download = ttk.Button(options_frame, text="Guardar Imagen", command=lambda fn=region[1]: self.download_image(fn))
+                click_download = ttk.Button(
+                    options_frame,
+                    text="Guardar Imagen",
+                    command=lambda fn=region[1]: self.download_image(fn),
+                )
                 click_download.pack(side="left", padx=5, pady=5)
 
-                click_delete = ttk.Button(options_frame, text="Eliminar", command=lambda fn=region[1]: self.delete_region(fn))
+                click_delete = ttk.Button(
+                    options_frame,
+                    text="Eliminar",
+                    command=lambda fn=region[1]: self.delete_region(fn),
+                )
                 click_delete.pack(side="left", padx=5, pady=5)
 
-                detect_button = ttk.Button(options_frame, text="Detectar", command=lambda fn=region[1]: self.detect_all_matches_with_threshold(fn))
+                detect_button = ttk.Button(
+                    options_frame,
+                    text="Detectar",
+                    command=lambda fn=region[1]: self.detect_all_matches_with_threshold(
+                        fn
+                    ),
+                )
                 detect_button.pack(side="left", padx=5, pady=5)
 
     def get_threshold_and_matches(self):
@@ -331,9 +437,18 @@ class ScreenshootView:
         threshold_window.title("Seleccionar Threshold")
         threshold_window.geometry("1000x1000")
 
-        threshold_var = tk.DoubleVar(value=0.8)
-        tk.Label(threshold_window, text="Seleccione el threshold de coincidencia:").pack(pady=10)
-        threshold_slider = tk.Scale(threshold_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal", variable=threshold_var)
+        threshold_var = tk.DoubleVar(value=0.9)
+        tk.Label(
+            threshold_window, text="Seleccione el threshold de coincidencia:"
+        ).pack(pady=10)
+        threshold_slider = tk.Scale(
+            threshold_window,
+            from_=0.5,
+            to=1.0,
+            resolution=0.01,
+            orient="horizontal",
+            variable=threshold_var,
+        )
         threshold_slider.pack()
 
         image_frame = tk.Frame(threshold_window)
@@ -358,11 +473,15 @@ class ScreenshootView:
             if self.update_id is not None:
                 threshold_window.after_cancel(self.update_id)
 
-            self.update_id = threshold_window.after(200, lambda: display_image_with_matches(threshold))
+            self.update_id = threshold_window.after(
+                200, lambda: display_image_with_matches(threshold)
+            )
 
         def display_image_with_matches(threshold):
             matcher = ImageMatcher(monitor_index)
-            matched_image, found_points, _ = matcher.match_image_with_threshold(screen_image, region_image, threshold)
+            matched_image, found_points, _ = matcher.match_image_with_threshold(
+                screen_image, region_image, threshold
+            )
 
             matched_image_rgb = cv2.cvtColor(matched_image, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(matched_image_rgb)
@@ -374,12 +493,16 @@ class ScreenshootView:
 
             count_label.config(text=f"Coincidencias encontradas: {len(found_points)}")
 
-        threshold_slider.config(command=lambda value: schedule_display_update(float(value)))
+        threshold_slider.config(
+            command=lambda value: schedule_display_update(float(value))
+        )
 
         count_label = tk.Label(threshold_window, text="Coincidencias encontradas: 0")
         count_label.pack()
 
-        confirm = tk.Button(threshold_window, text="Confirmar", command=threshold_window.destroy)
+        confirm = tk.Button(
+            threshold_window, text="Confirmar", command=threshold_window.destroy
+        )
         confirm.pack(pady=10)
 
         threshold_window.transient(self.root)
@@ -387,27 +510,38 @@ class ScreenshootView:
         self.root.wait_window(threshold_window)
 
         return threshold_var.get(), region_image
-    
+
     def handle_click(self, filename):
         image_data, offset_x, offset_y = self.db.get_image_data(filename)
-        
+
         if image_data:
             image_array = np.frombuffer(image_data, np.uint8)
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
             if region_image is not None:
                 clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
-                found = clicker.click_on_match(region_image, offset_x=offset_x, offset_y=offset_y)
+                found = clicker.click_on_match(
+                    region_image, offset_x=offset_x, offset_y=offset_y
+                )
 
                 if found:
-                    messagebox.showinfo("Resultado", "Coincidencia encontrada y clic realizado.")
+                    messagebox.showinfo(
+                        "Resultado", "Coincidencia encontrada y clic realizado."
+                    )
                 else:
-                    messagebox.showwarning("Resultado", "No se encontraron coincidencias en pantalla para realizar el clic.")
+                    messagebox.showwarning(
+                        "Resultado",
+                        "No se encontraron coincidencias en pantalla para realizar el clic.",
+                    )
             else:
-                messagebox.showerror("Error", "No se pudo decodificar la imagen de la región.")
+                messagebox.showerror(
+                    "Error", "No se pudo decodificar la imagen de la región."
+                )
         else:
-            messagebox.showerror("Error", f"No se encontró la imagen en la base de datos para el archivo: {filename}")
-
+            messagebox.showerror(
+                "Error",
+                f"No se encontró la imagen en la base de datos para el archivo: {filename}",
+            )
 
     def handle_click_and_type(self, filename):
         image_data, offset_x, offset_y = self.db.get_image_data(filename)
@@ -416,22 +550,38 @@ class ScreenshootView:
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
             if region_image is not None:
-                text = simpledialog.askstring("Texto a Escribir", "Ingrese el texto que desea escribir:")
+                text = simpledialog.askstring(
+                    "Texto a Escribir", "Ingrese el texto que desea escribir:"
+                )
                 if text:
                     clicker = ClickHandler(int(self.selected_monitor.get()) - 1)
-                    success = clicker.click_and_type(region_image, text, offset_x=offset_x, offset_y=offset_y)
+                    success = clicker.click_and_type(
+                        region_image, text, offset_x=offset_x, offset_y=offset_y
+                    )
 
                     if success:
-                        messagebox.showinfo("Resultado", "Coincidencia encontrada, clic realizado y texto escrito.")
+                        messagebox.showinfo(
+                            "Resultado",
+                            "Coincidencia encontrada, clic realizado y texto escrito.",
+                        )
                     else:
-                        messagebox.showinfo("Resultado", "No se encontraron coincidencias.")
+                        messagebox.showinfo(
+                            "Resultado", "No se encontraron coincidencias."
+                        )
                 else:
-                    messagebox.showwarning("Advertencia", "No se ingresó texto para escribir.")
+                    messagebox.showwarning(
+                        "Advertencia", "No se ingresó texto para escribir."
+                    )
             else:
-                messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+                messagebox.showerror(
+                    "Error", f"No se pudo cargar la imagen de la región: {filename}"
+                )
 
     def download_image(self, filename):
-        save_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG files", "*.png"), ("All files", "*.*")],
+        )
         if save_path:
             try:
                 image_data = self.db.get_image_data(filename)
@@ -445,17 +595,28 @@ class ScreenshootView:
 
                     if img is not None:
                         cv2.imwrite(save_path, img)
-                        messagebox.showinfo("Guardado", f"Imagen guardada exitosamente en {save_path}")
+                        messagebox.showinfo(
+                            "Guardado", f"Imagen guardada exitosamente en {save_path}"
+                        )
                     else:
-                        messagebox.showerror("Error", "No se pudo decodificar la imagen desde los datos binarios.")
+                        messagebox.showerror(
+                            "Error",
+                            "No se pudo decodificar la imagen desde los datos binarios.",
+                        )
                 else:
-                    messagebox.showerror("Error", f"No se encontró la imagen en la base de datos para el archivo: {filename}")
+                    messagebox.showerror(
+                        "Error",
+                        f"No se encontró la imagen en la base de datos para el archivo: {filename}",
+                    )
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo guardar la imagen: {e}")
 
     def delete_region(self, filename):
-        confirm = messagebox.askyesno("Confirmar Eliminación", f"¿Está seguro de que desea eliminar la región {filename}?")
-        
+        confirm = messagebox.askyesno(
+            "Confirmar Eliminación",
+            f"¿Está seguro de que desea eliminar la región {filename}?",
+        )
+
         if confirm:
             try:
                 if os.path.exists(filename):
@@ -464,9 +625,13 @@ class ScreenshootView:
                 self.db.delete_region(filename)
 
                 self.show_saved_regions()
-                messagebox.showinfo("Eliminado", f"La región {filename} se ha eliminado correctamente.")
+                messagebox.showinfo(
+                    "Eliminado", f"La región {filename} se ha eliminado correctamente."
+                )
             except Exception as e:
-                messagebox.showerror("Error", f"No se pudo eliminar la región {filename}: {e}")
+                messagebox.showerror(
+                    "Error", f"No se pudo eliminar la región {filename}: {e}"
+                )
 
     def detect_all_matches_with_threshold(self, filename):
         image_data, saved_threshold = self.db.get_image_data_and_threshold(filename)
@@ -475,14 +640,20 @@ class ScreenshootView:
             region_image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
         if region_image is None:
-            messagebox.showerror("Error", f"No se pudo cargar la imagen de la región: {filename}")
+            messagebox.showerror(
+                "Error", f"No se pudo cargar la imagen de la región: {filename}"
+            )
             return
 
         monitor_index = int(self.selected_monitor.get()) - 1
         try:
-            screenshot, monitor_info = self.screen_capture.capture_monitor(monitor_index)
+            screenshot, monitor_info = self.screen_capture.capture_monitor(
+                monitor_index
+            )
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo capturar el monitor seleccionado: {e}")
+            messagebox.showerror(
+                "Error", f"No se pudo capturar el monitor seleccionado: {e}"
+            )
             return
 
         detect_window = tk.Toplevel(self.root)
@@ -490,7 +661,9 @@ class ScreenshootView:
         detect_window.geometry("1000x1000")
 
         canvas = tk.Canvas(detect_window, width=800, height=550)
-        scroll_x = tk.Scrollbar(detect_window, orient="horizontal", command=canvas.xview)
+        scroll_x = tk.Scrollbar(
+            detect_window, orient="horizontal", command=canvas.xview
+        )
         scroll_y = tk.Scrollbar(detect_window, orient="vertical", command=canvas.yview)
         canvas.configure(xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
 
@@ -509,15 +682,16 @@ class ScreenshootView:
             if self.update_id is not None:
                 detect_window.after_cancel(self.update_id)
 
-
             self.update_id = detect_window.after(200, lambda: update_matches(threshold))
 
         def update_matches(threshold):
             match_image = screenshot.copy()
             matcher = ImageMatcher(monitor_index)
-            all_matches = matcher.find_all_matches(region_image, match_image, float(threshold))
+            all_matches = matcher.find_all_matches(
+                region_image, match_image, float(threshold)
+            )
 
-            for (top_left, bottom_right) in all_matches:
+            for top_left, bottom_right in all_matches:
                 cv2.rectangle(match_image, top_left, bottom_right, (0, 255, 0), 3)
 
             match_image_rgb = cv2.cvtColor(match_image, cv2.COLOR_BGR2RGB)
@@ -528,19 +702,33 @@ class ScreenshootView:
             canvas.image = tk_match_image
             canvas.config(scrollregion=canvas.bbox("all"))
 
-            match_count_label.config(text=f"Coincidencias encontradas: {len(all_matches)}")
+            match_count_label.config(
+                text=f"Coincidencias encontradas: {len(all_matches)}"
+            )
 
-        threshold_slider = tk.Scale(detect_window, from_=0.5, to=1.0, resolution=0.01, orient="horizontal",
-                                    label="Threshold de Coincidencia", command=lambda value: schedule_update_matches(float(value)))
-        threshold_slider.set(saved_threshold if saved_threshold is not None else 0.8)
+        threshold_slider = tk.Scale(
+            detect_window,
+            from_=0.5,
+            to=1.0,
+            resolution=0.01,
+            orient="horizontal",
+            label="Threshold de Coincidencia",
+            command=lambda value: schedule_update_matches(float(value)),
+        )
+        threshold_slider.set(saved_threshold if saved_threshold is not None else 0.9)
         threshold_slider.pack(side="bottom", fill="x")
 
         def save_threshold():
             new_threshold = threshold_slider.get()
             self.db.update_threshold(filename, new_threshold)
-            messagebox.showinfo("Threshold Guardado", f"El threshold ha sido actualizado a {new_threshold}.")
+            messagebox.showinfo(
+                "Threshold Guardado",
+                f"El threshold ha sido actualizado a {new_threshold}.",
+            )
 
-        save_button = tk.Button(detect_window, text="Guardar Threshold", command=save_threshold)
+        save_button = tk.Button(
+            detect_window, text="Guardar Threshold", command=save_threshold
+        )
         save_button.pack(side="bottom", pady=10)
 
         update_matches(threshold_slider.get())
@@ -554,7 +742,9 @@ class ScreenshootView:
         pil_image = Image.fromarray(region_rgb)
         tk_image = ImageTk.PhotoImage(pil_image)
 
-        canvas = tk.Canvas(offset_window, width=pil_image.width, height=pil_image.height)
+        canvas = tk.Canvas(
+            offset_window, width=pil_image.width, height=pil_image.height
+        )
         canvas.create_image(0, 0, anchor="nw", image=tk_image)
         canvas.image = tk_image
 
@@ -567,26 +757,50 @@ class ScreenshootView:
             click_offset["y"] = event.y
 
             canvas.delete("click_marker")
-            canvas.create_oval(event.x - 3, event.y - 3, event.x + 3, event.y + 3, fill="red", tags="click_marker")
+            canvas.create_oval(
+                event.x - 3,
+                event.y - 3,
+                event.x + 3,
+                event.y + 3,
+                fill="red",
+                tags="click_marker",
+            )
 
         canvas.bind("<Button-1>", on_click)
 
         def confirm_click_offset():
             if click_offset["x"] is not None and click_offset["y"] is not None:
-                _, buffer = cv2.imencode('.png', region_image)
+                _, buffer = cv2.imencode(".png", region_image)
                 image_data = buffer.tobytes()
 
                 self.db.insert_region(
-                    filename, x1, y1, x2, y2, image_data=image_data, threshold=threshold,
-                    click_offset=(click_offset["x"], click_offset["y"])
+                    filename,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    image_data=image_data,
+                    threshold=threshold,
+                    click_offset=(click_offset["x"], click_offset["y"]),
                 )
 
                 offset_window.destroy()
-                offset_window.after(500, lambda: messagebox.showinfo("Guardado", f"Región y punto de clic guardados exitosamente en la base de datos como {filename}"))
+                offset_window.after(
+                    500,
+                    lambda: messagebox.showinfo(
+                        "Guardado",
+                        f"Región y punto de clic guardados exitosamente en la base de datos como {filename}",
+                    ),
+                )
             else:
-                messagebox.showwarning("Advertencia", "Por favor, seleccione un punto de clic antes de confirmar.")
+                messagebox.showwarning(
+                    "Advertencia",
+                    "Por favor, seleccione un punto de clic antes de confirmar.",
+                )
 
-        confirm_button = tk.Button(offset_window, text="Confirmar Punto de Clic", command=confirm_click_offset)
+        confirm_button = tk.Button(
+            offset_window, text="Confirmar Punto de Clic", command=confirm_click_offset
+        )
         confirm_button.pack(pady=10)
 
     def _bind_mouse_scroll(self, event):
@@ -606,7 +820,11 @@ class ScreenshootView:
         coords_label = tk.Label(confirmation_window, text=coords_text)
         coords_label.pack(pady=5)
 
-        copy_button = ttk.Button(confirmation_window, text="Copiar Coordenadas", command=lambda: self.copy_to_clipboard(coords_text))
+        copy_button = ttk.Button(
+            confirmation_window,
+            text="Copiar Coordenadas",
+            command=lambda: self.copy_to_clipboard(coords_text),
+        )
         copy_button.pack(pady=5)
 
         text_box = tk.Text(confirmation_window, wrap="word", width=50, height=10)
@@ -614,30 +832,49 @@ class ScreenshootView:
         text_box.config(state="disabled")
         text_box.pack(pady=10)
 
-        save_button = ttk.Button(confirmation_window, text="Guardar", command=lambda: self.save_text_and_region(x1, y1, x2, y2, selected_region, confirmation_window))
+        save_button = ttk.Button(
+            confirmation_window,
+            text="Guardar",
+            command=lambda: self.save_text_and_region(
+                x1, y1, x2, y2, selected_region, confirmation_window
+            ),
+        )
         save_button.pack(side="left", padx=10)
 
-        cancel_button = ttk.Button(confirmation_window, text="Cancelar", command=confirmation_window.destroy)
+        cancel_button = ttk.Button(
+            confirmation_window, text="Cancelar", command=confirmation_window.destroy
+        )
         cancel_button.pack(side="right", padx=10)
 
     def copy_to_clipboard(self, text):
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
 
-    def save_text_and_region(self, x1, y1, x2, y2, selected_region, confirmation_window):
-        filename = simpledialog.askstring("Guardar Región", "Ingrese el nombre del archivo para guardar la región:")
+    def save_text_and_region(
+        self, x1, y1, x2, y2, selected_region, confirmation_window
+    ):
+        filename = simpledialog.askstring(
+            "Guardar Región", "Ingrese el nombre del archivo para guardar la región:"
+        )
         if filename:
             filename = f"{filename}.png" if not filename.endswith(".png") else filename
-            _, buffer = cv2.imencode('.png', selected_region)
+            _, buffer = cv2.imencode(".png", selected_region)
             image_data = buffer.tobytes()
-            threshold = 0.8
+            threshold = 0.9
 
-            self.db.insert_region_with_recognition(filename, x1, y1, x2, y2, image_data, threshold, self.recognized_text)
+            self.db.insert_region_with_recognition(
+                filename, x1, y1, x2, y2, image_data, threshold, self.recognized_text
+            )
 
-            messagebox.showinfo("Guardado", f"Región guardada exitosamente como '{filename}'")
+            messagebox.showinfo(
+                "Guardado", f"Región guardada exitosamente como '{filename}'"
+            )
             confirmation_window.destroy()
         else:
-            messagebox.showwarning("Advertencia", "No se ingresó un nombre de archivo. Operación de guardado cancelada.")
+            messagebox.showwarning(
+                "Advertencia",
+                "No se ingresó un nombre de archivo. Operación de guardado cancelada.",
+            )
 
     def update_text_display(self, text):
         self.text_display.config(state="normal")
@@ -645,5 +882,7 @@ class ScreenshootView:
         if text.strip():
             self.text_display.insert("1.0", text)
         else:
-            self.text_display.insert("1.0", "No hay texto reconocible en la región seleccionada.")
+            self.text_display.insert(
+                "1.0", "No hay texto reconocible en la región seleccionada."
+            )
         self.text_display.config(state="disabled")

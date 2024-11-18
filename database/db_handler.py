@@ -19,7 +19,7 @@ class DBHandler:
                     y2 INTEGER,
                     action TEXT DEFAULT 'none',
                     image BLOB,
-                    threshold REAL DEFAULT 0.8,
+                    threshold REAL DEFAULT 0.9,
                     click_x INTEGER,
                     click_y INTEGER
                 )
@@ -35,7 +35,7 @@ class DBHandler:
                     x2 INTEGER NOT NULL,
                     y2 INTEGER NOT NULL,
                     image BLOB,
-                    threshold REAL DEFAULT 0.8,
+                    threshold REAL DEFAULT 0.9,
                     recognized_text TEXT DEFAULT ''
                 )
             """)
@@ -74,7 +74,7 @@ class DBHandler:
                 y2 INTEGER,
                 action TEXT DEFAULT 'none',
                 image BLOB,
-                threshold REAL DEFAULT 0.8,
+                threshold REAL DEFAULT 0.9,
                 click_x INTEGER,
                 click_y INTEGER
             )
@@ -163,7 +163,7 @@ class DBHandler:
                 UPDATE regions SET click_x = ?, click_y = ? WHERE filename = ?
             """, (click_x, click_y, filename))
 
-    def insert_image_recognition(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.8, recognized_text="", click_offset=(0, 0)):
+    def insert_image_recognition(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.9, recognized_text="", click_offset=(0, 0)):
         with self.conn:
             self.conn.execute("""
                 INSERT INTO image_recognitions (filename, x1, y1, x2, y2, image, threshold, recognized_text, click_x, click_y)
@@ -187,14 +187,14 @@ class DBHandler:
     def close(self):
         self.conn.close()
 
-    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.8, click_offset=(0, 0)):
+    def insert_region(self, filename, x1, y1, x2, y2, image_data=None, threshold=0.9, click_offset=(0, 0)):
         with self.conn:
             self.conn.execute("""
                 INSERT INTO regions (filename, x1, y1, x2, y2, image, threshold, click_x, click_y)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (filename, x1, y1, x2, y2, image_data, threshold, click_offset[0], click_offset[1]))
             
-    def insert_region_from_import(self, filename, image, x1=None, y1=None, x2=None, y2=None, action=None, threshold=0.8, click_x=None, click_y=None):
+    def insert_region_from_import(self, filename, image, x1=None, y1=None, x2=None, y2=None, action=None, threshold=0.9, click_x=None, click_y=None):
         _, buffer = cv2.imencode('.png', image)
         image_data = buffer.tobytes()
 

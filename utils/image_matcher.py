@@ -16,7 +16,7 @@ class ImageMatcher:
         result = cv2.matchTemplate(screenshot_gray, region_gray, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
-        threshold = 0.8
+        threshold = 0.9
         if max_val >= threshold:
             top_left = max_loc
             bottom_right = (top_left[0] + region_image.shape[1], top_left[1] + region_image.shape[0])
@@ -46,7 +46,7 @@ class ImageMatcher:
 
         return matched_image, found_points, top_left
         
-    def find_all_matches(self, template, image, threshold=0.8):
+    def find_all_matches(self, template, image, threshold=0.9):
         result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
         match_locations = np.where(result >= threshold)
 
