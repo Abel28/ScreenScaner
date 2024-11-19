@@ -12,7 +12,7 @@ from screenshot.capture import ScreenCapture
 import io
 from utils.image_matcher import ImageMatcher
 import os
-import pytesseract
+import time
 
 
 class ScreenshootView:
@@ -235,7 +235,10 @@ class ScreenshootView:
         monitor_index = int(self.selected_monitor.get()) - 1
 
         try:
+            self.root.withdraw()
+            time.sleep(1)
             self.image, _ = self.screen_capture.capture_monitor(monitor_index)
+            self.root.deiconify()
             if self.image is not None:
                 image_rgb = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(image_rgb)
@@ -273,15 +276,29 @@ class ScreenshootView:
         if self.selector and self.selector.selected_regions:
             x1, y1, x2, y2 = self.selector.selected_regions[-1]
 
-            filename = simpledialog.askstring(
+            # Obtener las coordenadas y tamaño de la ventana principal
+            root_x = self.root.winfo_x()
+            root_y = self.root.winfo_y()
+            root_width = self.root.winfo_width()
+            root_height = self.root.winfo_height()
+
+            # Centrar el diálogo en la ventana principal
+            dialog_x = root_x + root_width // 2 - 150  # Ajusta 150 para el ancho estimado del diálogo
+            dialog_y = root_y + root_height // 2 - 75  # Ajusta 75 para la altura estimada del diálogo
+
+            # Crear el diálogo de forma personalizada
+            dialog = simpledialog.askstring(
                 "Guardar Región",
                 "Ingrese el nombre del archivo para guardar la región:",
+                parent=self.root
             )
 
-            if filename:
-                filename = (
-                    f"{filename}.png" if not filename.endswith(".png") else filename
-                )
+            # Mover el diálogo al lugar calculado
+            if dialog:
+                self.root.tk.call('wm', 'geometry', self.root, f"+{dialog_x}+{dialog_y}")
+
+            if dialog:
+                filename = f"{dialog}.png" if not dialog.endswith(".png") else dialog
 
                 if self.db.check_region_exists(filename):
                     messagebox.showwarning(
